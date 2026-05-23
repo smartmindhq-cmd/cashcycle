@@ -1,0 +1,1435 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <title>CashCycle</title>
+
+  <!-- PWA manifest -->
+  <link rel="manifest" href="manifest.json" />
+
+  <!-- iOS PWA — makes it feel exactly like a native app when added to home screen -->
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="CashCycle" />
+  <meta name="format-detection" content="telephone=no" />
+
+  <!-- Theme colors -->
+  <meta name="theme-color" content="#ffffff" />
+  <meta name="msapplication-navbutton-color" content="#ffffff" />
+
+  <!-- Icons — iOS requires PNG, not SVG -->
+  <link rel="apple-touch-icon" sizes="180x180" href="icon-180.png" />
+  <link rel="apple-touch-icon" sizes="192x192" href="icon-192.png" />
+  <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png" />
+  <link rel="icon" type="image/svg+xml" href="icon.svg" />
+
+  <!-- iOS splash screens — one per iPhone size -->
+  <!-- iPhone 15 Pro Max / 14 Plus -->
+  <link rel="apple-touch-startup-image" media="screen and (device-width: 430px) and (device-height: 932px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="icon-512.png" />
+  <!-- iPhone 15 Pro / 15 / 14 Pro -->
+  <link rel="apple-touch-startup-image" media="screen and (device-width: 393px) and (device-height: 852px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="icon-512.png" />
+  <!-- iPhone 14 / 13 / 12 -->
+  <link rel="apple-touch-startup-image" media="screen and (device-width: 390px) and (device-height: 844px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="icon-512.png" />
+  <!-- iPhone SE / 8 / 7 / 6 -->
+  <link rel="apple-touch-startup-image" media="screen and (device-width: 375px) and (device-height: 667px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)" href="icon-512.png" />
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+    html,body,#root{
+      height:100%;height:-webkit-fill-available;width:100%;overflow:hidden;
+      background:#ffffff;
+      font-family:-apple-system,BlinkMacSystemFont,'Inter',system-ui,sans-serif;
+      -webkit-font-smoothing:antialiased;
+      overscroll-behavior:none;
+      -webkit-user-select:none;user-select:none;
+      touch-action:pan-x pan-y;
+    }
+    /* Prevent iOS zoom on input focus — font-size must be ≥ 16px */
+    input,textarea,select{font-size:16px;-webkit-user-select:auto;user-select:auto;}
+    /* Smooth momentum scrolling on all scrollable areas */
+    .overflow-y-auto,.overflow-y-scroll{-webkit-overflow-scrolling:touch;}
+    /* Hide scrollbars but keep scrolling */
+    ::-webkit-scrollbar{display:none;}
+    /* Native-feel button press */
+    button{-webkit-touch-callout:none;touch-action:manipulation;}
+    @keyframes slideIn{from{transform:translateX(-100%)}to{transform:translateX(0)}}
+    @keyframes slideUp{from{transform:translateY(100%);opacity:0}to{transform:translateY(0);opacity:1}}
+    @keyframes fadeIn{from{opacity:0}to{opacity:1}}
+  </style>
+</head>
+<body class="m-0 p-0">
+  <div id="root"></div>
+  <script type="text/babel">
+    const { useState, useContext, createContext, useMemo, useEffect, useRef } = React;
+    const TabCtx = createContext({ tab: "home", setTab: () => {} });
+    const cx = (...a) => a.filter(Boolean).join(" ");
+    const fmt = (n) => n >= 1000 ? `$${(n / 1000).toFixed(n % 1000 === 0 ? 0 : 1)}k` : `$${n}`;
+    const money = (n) => n.toLocaleString("en-US", { style: "currency", currency: "USD" });
+    const LANGS = [["English", "English"], ["Español", "Spanish"], ["Français", "French"], ["Italiano", "Italian"], ["Deutsch", "German"]];
+    const ACCENTS = ["#3b82f6", "#22c55e", "#fb7185", "#a855f7", "#f59e0b", "#14b8a6", "#e11d48", "#64748b"];
+    const BUDGET_CYCLES = [["📅","Weekly","Plan your budget week by week","green"],["📆","Bi-Weekly","Every two weeks (common pay period)","blue"],["🗓️","Monthly","Traditional monthly budgeting","purple"],["💵","Paycheck to Paycheck","Budget between paydays","amber"]];
+    const WEEKLY_BUDGET_ROWS = [{icon:"🍔",name:"Food",note:"Don't forget to set a budget!",bar:"border-amber-400 bg-amber-50",val:0},{icon:"🚗",name:"Transportation",fixed:true,sub:"Based on planned expenses",bar:"border-sky-400 bg-sky-50",val:400},{icon:"🎬",name:"Entertainment",bar:"border-purple-400 bg-purple-50",val:0},{icon:"🌱",name:"Savings",bar:"border-emerald-400 bg-emerald-50",val:0}];
+    const ASSETS = [["🚗","Vehicle"],["🏠","Home"],["💻","Electronics"],["📈","Investment"]];
+    const LIABILITIES = [["🏠","Mortgage"],["🚗","Auto Loan"],["🎓","Student Loan"],["💳","Credit Card"]];
+    const GOAL_OPTIONS = {"Savings Goals":[["🚨","Emergency Fund"],["✈️","Vacation"],["🏠","House Down Payment"]],"Debt Payoff":[["💳","Credit Card Debt"],["📚","Student Loans"]],"Retirement":[["🏖️","Retirement"]]};
+
+    const BANKS = [
+      {id:"chase",name:"Chase",sub:"JPMorgan Chase",icon:"🏛️",color:"#005EB8"},
+      {id:"bofa",name:"Bank of America",sub:"BofA",icon:"🏦",color:"#E31837"},
+      {id:"wells",name:"Wells Fargo",sub:"Wells Fargo Bank",icon:"🐴",color:"#D71E28"},
+      {id:"pnc",name:"PNC Bank",sub:"PNC Financial Services",icon:"🟠",color:"#F58025"},
+      {id:"usbank",name:"U.S. Bank",sub:"US Bancorp",icon:"🏢",color:"#C11E28"},
+      {id:"capital",name:"Capital One",sub:"Capital One Financial",icon:"💳",color:"#D03027"},
+      {id:"td",name:"TD Bank",sub:"TD Bank N.A.",icon:"🍁",color:"#2C9142"},
+      {id:"truist",name:"Truist Bank",sub:"Formerly BB&T & SunTrust",icon:"🔷",color:"#5C38A7"},
+      {id:"regions",name:"Regions Bank",sub:"Regions Financial",icon:"⭐",color:"#005EB8"},
+      {id:"key",name:"KeyBank",sub:"KeyCorp",icon:"🔑",color:"#CC0000"},
+      {id:"fifth",name:"Fifth Third Bank",sub:"Fifth Third Bancorp",icon:"5️⃣",color:"#013D7D"},
+      {id:"mt",name:"M&T Bank",sub:"M&T Bank Corporation",icon:"🟡",color:"#0057A8"},
+      {id:"huntington",name:"Huntington Bank",sub:"Huntington Bancshares",icon:"🟢",color:"#00AA4F"},
+      {id:"comerica",name:"Comerica Bank",sub:"Comerica Incorporated",icon:"💼",color:"#0079C1"},
+      {id:"citizens",name:"Citizens Bank",sub:"Citizens Financial Group",icon:"🏙️",color:"#003B70"},
+      {id:"ally",name:"Ally Bank",sub:"Ally Financial",icon:"🤖",color:"#8A0000"},
+      {id:"discover",name:"Discover Bank",sub:"Discover Financial",icon:"🔍",color:"#F77F00"},
+      {id:"citi",name:"Citibank",sub:"Citigroup",icon:"🔵",color:"#003B70"},
+      {id:"amex",name:"American Express",sub:"Amex Banking",icon:"💙",color:"#016FD0"},
+      {id:"marcus",name:"Marcus",sub:"Goldman Sachs Bank",icon:"🏖️",color:"#2E7D32"},
+      {id:"usaa",name:"USAA Bank",sub:"Military & Families",icon:"🇺🇸",color:"#003087"},
+      {id:"navy",name:"Navy Federal",sub:"Navy Federal Credit Union",icon:"⚓",color:"#003087"},
+      {id:"sofi",name:"SoFi Bank",sub:"SoFi Technologies",icon:"📱",color:"#222D65"},
+      {id:"chime",name:"Chime",sub:"The Bancorp Bank",icon:"💚",color:"#42B678"},
+      {id:"synchrony",name:"Synchrony Bank",sub:"Synchrony Financial",icon:"🔒",color:"#0057B8"},
+      {id:"bbva",name:"BBVA USA",sub:"PNC-acquired",icon:"🌊",color:"#004A97"},
+      {id:"zions",name:"Zions Bank",sub:"Zions Bancorporation",icon:"⛰️",color:"#003087"},
+      {id:"firsthorizon",name:"First Horizon",sub:"First Tennessee",icon:"🌅",color:"#00529B"},
+      {id:"suntrust",name:"SunTrust (Truist)",sub:"Now Truist Bank",icon:"☀️",color:"#5C38A7"},
+      {id:"pnc_virtual",name:"PNC Virtual Wallet",sub:"PNC Digital Banking",icon:"🟠",color:"#F58025"},
+    ];
+
+    function generateBankData(bank) {
+      const now = new Date();
+      const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+      const m = months[now.getMonth()];
+      const templates = {
+        pnc: {
+          accounts:[{name:"PNC Performance Checking",type:"checking",balance:3248.52,number:"••••7741"},{name:"PNC High Yield Savings",type:"savings",balance:8900.00,number:"••••3302"}],
+          transactions:[
+            {id:Date.now()+1,type:"income",emoji:"💰",label:"PNC Direct Deposit — Employer",amt:1840,date:`${m} 14`,category:"Income"},
+            {id:Date.now()+2,type:"expense",emoji:"🏠",label:"Rent — Zelle Transfer",amt:1200,date:`${m} 1`,category:"Expense"},
+            {id:Date.now()+3,type:"expense",emoji:"🛒",label:"Giant Eagle Grocery",amt:94.32,date:`${m} 8`,category:"Food"},
+            {id:Date.now()+4,type:"expense",emoji:"⛽",label:"GetGo Fuel",amt:52.10,date:`${m} 10`,category:"Transport"},
+            {id:Date.now()+5,type:"expense",emoji:"💊",label:"CVS Pharmacy",amt:28.75,date:`${m} 12`,category:"Health"},
+            {id:Date.now()+6,type:"expense",emoji:"🍕",label:"Domino's Pizza",amt:22.49,date:`${m} 16`,category:"Food"},
+            {id:Date.now()+7,type:"income",emoji:"💰",label:"PNC Direct Deposit — Employer",amt:1840,date:`${m} 28`,category:"Income"},
+            {id:Date.now()+8,type:"expense",emoji:"📱",label:"Verizon Bill",amt:85.00,date:`${m} 20`,category:"Bills"},
+            {id:Date.now()+9,type:"expense",emoji:"⚡",label:"Duquesne Light Electric",amt:67.44,date:`${m} 18`,category:"Bills"},
+            {id:Date.now()+10,type:"expense",emoji:"☕",label:"Starbucks",amt:6.85,date:`${m} 19`,category:"Food"},
+          ],
+          upcoming:[
+            {emoji:"💰",label:"Direct Deposit",amt:1840,date:"Jun 1",type:"income"},
+            {emoji:"🏠",label:"Rent",amt:1200,date:"Jun 1",type:"expense"},
+            {emoji:"📱",label:"Verizon Bill",amt:85,date:"Jun 20",type:"expense"},
+          ],
+          stats:{income:3680,expenses:1556.95,net:2123.05,paycheckFreq:"Bi-weekly",nextPaycheck:"Jun 1"},
+        },
+        chase: {
+          accounts:[{name:"Chase Total Checking",type:"checking",balance:4102.87,number:"••••4521"},{name:"Chase Savings",type:"savings",balance:12500.00,number:"••••8834"}],
+          transactions:[
+            {id:Date.now()+1,type:"income",emoji:"💰",label:"Chase Direct Deposit",amt:2400,date:`${m} 15`,category:"Income"},
+            {id:Date.now()+2,type:"expense",emoji:"🏠",label:"Mortgage Payment",amt:1450,date:`${m} 1`,category:"Bills"},
+            {id:Date.now()+3,type:"expense",emoji:"🛒",label:"Whole Foods Market",amt:127.53,date:`${m} 9`,category:"Food"},
+            {id:Date.now()+4,type:"expense",emoji:"🚗",label:"Shell Gas Station",amt:60.00,date:`${m} 11`,category:"Transport"},
+            {id:Date.now()+5,type:"expense",emoji:"📺",label:"Netflix",amt:15.99,date:`${m} 13`,category:"Entertainment"},
+            {id:Date.now()+6,type:"expense",emoji:"🍽️",label:"Chipotle",amt:18.25,date:`${m} 17`,category:"Food"},
+            {id:Date.now()+7,type:"income",emoji:"💰",label:"Chase Direct Deposit",amt:2400,date:`${m} 30`,category:"Income"},
+            {id:Date.now()+8,type:"expense",emoji:"💊",label:"Walgreens",amt:32.10,date:`${m} 20`,category:"Health"},
+            {id:Date.now()+9,type:"expense",emoji:"🎬",label:"AMC Theaters",amt:42.00,date:`${m} 22`,category:"Entertainment"},
+          ],
+          upcoming:[
+            {emoji:"💰",label:"Direct Deposit",amt:2400,date:"Jun 15",type:"income"},
+            {emoji:"🏠",label:"Mortgage",amt:1450,date:"Jun 1",type:"expense"},
+            {emoji:"📺",label:"Netflix",amt:15.99,date:"Jun 13",type:"expense"},
+          ],
+          stats:{income:4800,expenses:1745.87,net:3054.13,paycheckFreq:"Bi-weekly",nextPaycheck:"Jun 15"},
+        },
+      };
+      const def = {
+        accounts:[{name:`${bank.name} Checking`,type:"checking",balance:2500+Math.floor(Math.random()*5000),number:"••••"+Math.floor(1000+Math.random()*9000)},{name:`${bank.name} Savings`,type:"savings",balance:5000+Math.floor(Math.random()*10000),number:"••••"+Math.floor(1000+Math.random()*9000)}],
+        transactions:[
+          {id:Date.now()+1,type:"income",emoji:"💰",label:"Direct Deposit — Employer",amt:1800+Math.floor(Math.random()*1200),date:`${m} 15`,category:"Income"},
+          {id:Date.now()+2,type:"expense",emoji:"🏠",label:"Rent / Mortgage",amt:1000+Math.floor(Math.random()*500),date:`${m} 1`,category:"Bills"},
+          {id:Date.now()+3,type:"expense",emoji:"🛒",label:"Grocery Store",amt:Math.floor(60+Math.random()*80),date:`${m} 8`,category:"Food"},
+          {id:Date.now()+4,type:"expense",emoji:"⛽",label:"Gas Station",amt:Math.floor(40+Math.random()*40),date:`${m} 10`,category:"Transport"},
+          {id:Date.now()+5,type:"expense",emoji:"📱",label:"Phone Bill",amt:Math.floor(60+Math.random()*40),date:`${m} 18`,category:"Bills"},
+          {id:Date.now()+6,type:"income",emoji:"💰",label:"Direct Deposit — Employer",amt:1800+Math.floor(Math.random()*1200),date:`${m} 30`,category:"Income"},
+        ],
+        upcoming:[
+          {emoji:"💰",label:"Direct Deposit",amt:1800,date:"Jun 15",type:"income"},
+          {emoji:"🏠",label:"Rent",amt:1000,date:"Jun 1",type:"expense"},
+        ],
+        stats:{income:3600,expenses:1200,net:2400,paycheckFreq:"Bi-weekly",nextPaycheck:"Jun 15"},
+      };
+      return templates[bank.id] || def;
+    }
+
+    const EVENTS = {
+      18: [{ emoji: "🛒", label: "Groceries", amt: -75, color: "bg-amber-100 border-amber-400" }, { emoji: "🚇", label: "Subway", amt: -5, color: "bg-sky-100 border-sky-400", done: true }],
+      19: [{ emoji: "📺", label: "Netflix", amt: -20, color: "bg-purple-100 border-purple-400" }, { emoji: "🍜", label: "Lunch", amt: -12, color: "bg-amber-100 border-amber-400", done: true }],
+      20: [{ emoji: "☕", label: "Morning", amt: -5, color: "bg-amber-50 border-amber-300", done: true }],
+      21: [{ emoji: "✈️", label: "Vacation", amt: -100, color: "bg-emerald-100 border-emerald-400" }],
+      22: [{ emoji: "🏠", label: "Rent", amt: -1000, color: "bg-stone-100 border-stone-400" }],
+      24: [{ emoji: "⚡", label: "Electric", amt: -85, color: "bg-indigo-100 border-indigo-400" }],
+      29: [{ emoji: "🌐", label: "Internet", amt: -65, color: "bg-indigo-100 border-indigo-400" }, { emoji: "🏋️", label: "Gym", amt: -35, color: "bg-rose-100 border-rose-400" }],
+      30: [{ emoji: "🎵", label: "Spotify", amt: -11, color: "bg-purple-100 border-purple-400" }, { emoji: "☕", label: "Coffee", amt: -5, color: "bg-amber-100 border-amber-400" }],
+    };
+    const BALANCES = { 18: -5, 19: -15, 20: 3000, 21: 2900, 22: 1900, 24: 1800, 29: 1700, 30: 1700 };
+    const CATEGORIES = [{ icon: "🍽️", name: "Food", used: 95, planned: 232, pct: 41, bar: "bg-amber-400", text: "text-amber-500" }, { icon: "🚗", name: "Transportation", used: 5, planned: 173, pct: 3, bar: "bg-sky-400", text: "text-sky-500" }, { icon: "🎭", name: "Entertainment", used: 20, planned: 31, pct: 65, bar: "bg-purple-500", text: "text-purple-600" }];
+    const DEBTS = [{ icon: "🚗", name: "Car Loan", tag: "Auto Loan", pct: 60, paid: 8000, total: 20000, apr: 4.5, pmt: 350 }, { icon: "🎓", name: "Student Loan", tag: "Student Loan", pct: 87, paid: 4500, total: 35000, apr: 5.2, pmt: 180 }];
+    const GOALS = [{ icon: "✈️", name: "Vacation", kind: "Savings", away: "4 mo away", have: 750, target: 2000, pct: 38, bar: "bg-blue-500", cadence: "$100/wk" }, { icon: "🛡️", name: "Emergency", kind: "Savings", away: "6 mo away", have: 3250, target: 5000, pct: 65, bar: "bg-emerald-500", cadence: "$250 bi-wk" }];
+    function PrimaryBtn({children,onClick,disabled}){return(<button onClick={onClick} disabled={disabled} className={cx("flex items-center justify-center gap-2 rounded-full px-8 py-4 font-bold text-white transition active:scale-95",disabled?"bg-slate-300":"bg-blue-500 hover:bg-blue-600 shadow-lg shadow-blue-500/30")}>{children}</button>);}
+    function Check({on}){return(<span className={cx("flex h-7 w-7 items-center justify-center rounded-full text-white text-sm transition",on?"bg-blue-500":"bg-slate-200 text-transparent")}>✓</span>);}
+    function Toggle({on,onClick}){return(<button onClick={onClick} className={cx("h-8 w-14 rounded-full p-1 transition",on?"bg-blue-500":"bg-slate-300")}><div className={cx("h-6 w-6 rounded-full bg-white transition",on&&"translate-x-6")}/></button>);}
+    function Row({l,sub,r}){return(<div className="flex items-center justify-between py-4"><div><div className="font-bold text-slate-900">{l}</div>{sub&&<div className="text-sm text-slate-500">{sub}</div>}</div><span className="text-slate-400">{r}</span></div>);}
+    function ToggleRow({l,sub,on,set}){return(<div className="flex items-center justify-between py-4"><div className="flex-1 pr-3"><div className="font-bold text-slate-900">{l}</div>{sub&&<div className="text-sm text-slate-500">{sub}</div>}</div><Toggle on={on} onClick={()=>set(!on)}/></div>);}
+    function Sheet2({title,sub,children,footer,scroll=true,onClose}){
+      const ref=useRef(null);
+      useEffect(()=>{
+        if(!onClose||!ref.current)return;
+        const el=ref.current;let sx=0,sy=0;
+        const ts=e=>{sx=e.touches[0].clientX;sy=e.touches[0].clientY;};
+        const te=e=>{const ex=e.changedTouches[0].clientX,ey=e.changedTouches[0].clientY;const dx=ex-sx,dy=ey-sy;if(dx>60&&Math.abs(dy)<100)onClose();if(dy>80&&Math.abs(dx)<100)onClose();};
+        el.addEventListener("touchstart",ts,{passive:true});el.addEventListener("touchend",te,{passive:true});
+        return()=>{el.removeEventListener("touchstart",ts);el.removeEventListener("touchend",te);};
+      },[onClose]);
+      return(<div ref={ref} className="absolute inset-0 z-30 flex flex-col justify-end bg-black/30">
+        <div className="flex max-h-[92%] flex-col rounded-t-[36px] bg-white px-5 pt-6" style={{paddingBottom:"calc(env(safe-area-inset-bottom,10px) + 8px)"}}>
+          <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-slate-200"/>
+          <h1 className="text-2xl font-extrabold tracking-tight">{title}</h1>
+          {sub&&<p className="mt-1 text-sm text-slate-500">{sub}</p>}
+          <div className={cx("mt-4 flex-1",scroll&&"overflow-y-auto")}>{children}</div>
+          <div className="mt-4 flex gap-3">{footer}</div>
+        </div>
+      </div>);
+    }
+    function SummaryCard({title,total,rows}){return(<div className="mb-4 rounded-2xl bg-slate-50 p-4 text-slate-900"><div className="flex items-center justify-between font-bold"><span>{title}</span><span>{total}</span></div><div className="mt-2 divide-y">{rows.map(([l,v])=>(<div key={l} className="flex items-center justify-between py-2 text-slate-600"><span>{l}</span><span className="font-semibold text-slate-700">{v}</span></div>))}</div></div>);}
+
+    function TopBar({today="$0",openMenu,openCash,openInsights,openWeather}){
+      return(<div className="flex items-center justify-between px-3 pb-1" style={{paddingTop:"calc(env(safe-area-inset-top,0px) + 10px)"}}>
+        <div className="flex gap-1.5">
+          <button onClick={openMenu} className="grid h-10 w-10 place-items-center rounded-full bg-slate-100 text-slate-900 transition active:scale-90"><MenuIcon/></button>
+          <div className="grid h-10 w-10 place-items-center rounded-full bg-slate-100 text-slate-500"><ChatIcon/></div>
+        </div>
+        <button onClick={openCash} className="rounded-full bg-slate-100 px-4 py-1 text-center text-slate-900 transition active:scale-95">
+          <div className="text-base font-extrabold leading-none">{today}</div>
+          <div className="text-[10px] font-semibold text-slate-500">tap for breakdown</div>
+        </button>
+        <div className="flex gap-1.5">
+          <button onClick={openInsights} className="grid h-10 w-10 place-items-center rounded-full bg-slate-100 text-slate-500 transition active:scale-90"><BarsIcon/></button>
+          <button onClick={openWeather} className="grid h-10 w-10 place-items-center rounded-full bg-slate-100 text-slate-400 transition active:scale-90"><TrophyIcon/></button>
+        </div>
+      </div>);
+    }
+
+    function TabBar({onInsights,balance,openAdd}){
+      const {tab,setTab}=useContext(TabCtx);
+      const items=[["home","📅"],["history","🕐"],["add","+"],["debt","⊞"],["goals","💳"]];
+      return(<div className="absolute bottom-0 left-0 right-0 border-t bg-white/95 backdrop-blur" style={{paddingBottom:"env(safe-area-inset-bottom,20px)"}}>
+        <div className="flex items-center justify-around px-4 pt-3">
+          {items.map(([k,ic])=>k==="add"?(
+            <button key={k} onClick={()=>openAdd?.()} className="grid h-14 w-14 place-items-center rounded-full bg-blue-500 text-3xl text-white shadow-lg shadow-blue-500/30">+</button>
+          ):(
+            <button key={k} onClick={()=>k==="insights"?onInsights?.():setTab(k)} className={cx("grid h-11 w-11 place-items-center rounded-full text-xl",tab===k?"text-blue-500":"text-slate-400")}>{ic}</button>
+          ))}
+        </div>
+        {balance&&<div className="absolute bottom-full left-3 mb-2"><button className="flex items-center gap-1 rounded-full border border-emerald-200 bg-white px-3 py-1.5 text-sm font-bold text-slate-800 shadow-md">{balance} <span className="text-emerald-500">🌿</span></button></div>}
+      </div>);
+    }
+
+    function SelectPill({icon,label,active,onClick}){return(<button onClick={onClick} className={cx("flex items-center gap-2 rounded-full border px-4 py-3 text-sm font-semibold transition active:scale-95",active?"border-blue-500 bg-blue-50 text-blue-700":"border-slate-200 bg-slate-50 text-slate-700")}><span>{icon}</span>{label}{active&&<span className="text-blue-500">✓</span>}</button>);}
+    function FlowBack({onClick}){return<button onClick={onClick} className="rounded-2xl bg-slate-100 px-6 py-4 font-bold text-slate-600">‹ Back</button>;}
+    function FlowNext({onClick,label="Next →"}){return<button onClick={onClick} className="flex-1 rounded-2xl bg-blue-500 py-4 font-bold text-white active:scale-95">{label}</button>;}
+    // ── SVG Icons ─────────────────────────────────────────
+    const ICON={width:24,height:24,viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round"};
+    function MenuIcon(){return<svg {...ICON}><path d="M4 7h16M4 12h16M4 17h16"/></svg>;}
+    function ChatIcon(){return<svg {...ICON}><path d="M21 12a8 8 0 0 1-11.5 7.2L4 20l1-4.5A8 8 0 1 1 21 12z"/></svg>;}
+    function BarsIcon(){return<svg {...ICON}><path d="M6 20V10M12 20V4M18 20v-7"/></svg>;}
+    function TrophyIcon(){return<svg {...ICON}><path d="M7 4h10v4a5 5 0 0 1-10 0V4zM5 5H3v2a3 3 0 0 0 3 3M19 5h2v2a3 3 0 0 1-3 3M9 18h6M10 18l.5-3h3l.5 3"/></svg>;}
+    function UserIcon(){return<svg {...ICON}><circle cx="12" cy="8" r="4"/><path d="M5 21c0-3.9 3.1-7 7-7s7 3.1 7 7"/></svg>;}
+    function GearIcon(){return<svg {...ICON}><circle cx="12" cy="12" r="3.2"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5 5l2.1 2.1M16.9 16.9 19 19M19 5l-2.1 2.1M7.1 16.9 5 19"/></svg>;}
+    function DownloadIcon(){return<svg {...ICON}><path d="M12 3v12M7 11l5 5 5-5M4 20h16"/></svg>;}
+    function SunIcon(){return<svg {...ICON}><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5 19 19M19 5l-1.5 1.5M6.5 17.5 5 19"/></svg>;}
+    function CalendarIcon(){return<svg {...ICON}><rect x="3" y="4.5" width="18" height="16" rx="3"/><path d="M3 9h18M8 2.5v4M16 2.5v4"/>{[8,12,16].map(x=>[12,16].map(y=><circle key={`${x}-${y}`} cx={x} cy={y} r="0.6" fill="currentColor" stroke="none"/>))}</svg>;}
+    function PieIcon(){return<svg {...ICON}><path d="M12 3a9 9 0 1 0 9 9h-9V3z"/><path d="M12 3v9h9" opacity="0.35"/></svg>;}
+    function PlusIcon(){return<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round"><path d="M12 5v14M5 12h14"/></svg>;}
+    function GridIcon(){return<svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">{[5,12,19].map(x=>[5,12,19].map(y=><circle key={`${x}-${y}`} cx={x} cy={y} r="1.6"/>))}</svg>;}
+    function CardIcon(){return<svg {...ICON}><rect x="2.5" y="6" width="19" height="13" rx="2.5"/><path d="M2.5 10.5h6"/></svg>;}
+    function DockBtn({active,onClick,label,children}){return<button onClick={onClick} aria-label={label} className={cx("grid h-12 w-12 place-items-center rounded-full transition active:scale-90",active?"text-[#5b7cfa]":"text-slate-800")}>{children}</button>;}
+    function DockNav({active,onSelect,onAdd,addOpen,visible=true}){
+      return(
+        <div className="absolute bottom-0 left-0 right-0 z-20 flex justify-center pointer-events-none" style={{paddingBottom:"env(safe-area-inset-bottom,0px)",transform:visible?"translateY(0)":"translateY(120%)",opacity:visible?1:0,transition:"transform 0.32s cubic-bezier(0.4,0,0.2,1),opacity 0.32s ease"}}>
+          <div className="flex items-center justify-between rounded-full bg-white px-3 py-2 shadow-[0_8px_32px_rgba(0,0,0,0.18)] ring-1 ring-black/6 pointer-events-auto" style={{width:"88%",maxWidth:"360px"}}>
+            <DockBtn label="calendar" active={active==="home"} onClick={()=>onSelect("home")}><CalendarIcon/></DockBtn>
+            <DockBtn label="insights" active={active==="insights"} onClick={()=>onSelect("insights")}><PieIcon/></DockBtn>
+            <button onClick={onAdd} aria-label="Add" className="mx-1 grid h-14 w-14 place-items-center rounded-full bg-[#5b7cfa] text-white shadow-lg active:scale-90" style={{transition:"transform 0.25s cubic-bezier(0.34,1.56,0.64,1)",transform:addOpen?"rotate(45deg)":"rotate(0deg)"}}><PlusIcon/></button>
+            <DockBtn label="debt" active={active==="debt"} onClick={()=>onSelect("debt")}><GridIcon/></DockBtn>
+            <DockBtn label="goals" active={active==="goals"} onClick={()=>onSelect("goals")}><CardIcon/></DockBtn>
+          </div>
+        </div>
+      );
+    }
+
+    function SideMenu({open,onClose,go,dark,setDark,onCheckUpdate}){
+      if(!open)return null;
+      const panelRef=useRef(null);
+      useEffect(()=>{
+        const el=panelRef.current;if(!el)return;
+        let sx=0,sy=0;
+        const ts=e=>{sx=e.touches[0].clientX;sy=e.touches[0].clientY;};
+        const te=e=>{const dx=e.changedTouches[0].clientX-sx,dy=Math.abs(e.changedTouches[0].clientY-sy);if(dx<-50&&dy<80)onClose();};
+        el.addEventListener("touchstart",ts,{passive:true});el.addEventListener("touchend",te,{passive:true});
+        return()=>{el.removeEventListener("touchstart",ts);el.removeEventListener("touchend",te);};
+      },[onClose]);
+      const items=[
+        {key:"home",    label:"Forecast",          dest:"home",     icon:<CalendarIcon/>},
+        {key:"profile", label:"Profile",            dest:"profile",  icon:<UserIcon/>},
+        {key:"settings",label:"Settings",           dest:"settings", icon:<GearIcon/>},
+        {key:"update",  label:"Check for Update",   dest:null,       icon:<DownloadIcon/>},
+      ];
+      return(<div className="absolute inset-0 z-40 flex" onClick={onClose}>
+        <div ref={panelRef} className="flex h-full w-[80%] flex-col bg-[#f4f4f5] px-5 shadow-2xl" style={{paddingTop:"calc(env(safe-area-inset-top,0px)+24px)",paddingBottom:"calc(env(safe-area-inset-bottom,10px)+16px)",animation:"slideIn .25s ease-out"}} onClick={e=>e.stopPropagation()}>
+          <h1 className="text-4xl font-extrabold tracking-tight text-slate-900">Menu</h1>
+          <div className="mt-6 flex items-center justify-between px-1">
+            <span className="flex items-center gap-3 text-lg font-semibold text-slate-900"><SunIcon/> Dark Mode</span>
+            <Toggle on={dark} onClick={()=>setDark(!dark)}/>
+          </div>
+          <div className="mt-4 space-y-3">
+            {items.map(it=>(<button key={it.key} onClick={()=>{onClose();it.dest?go(it.dest):it.key==="update"?onCheckUpdate?.():null;}} className="flex w-full items-center gap-4 rounded-2xl bg-white px-5 py-5 text-left text-xl font-semibold shadow-sm transition active:scale-[0.98] text-slate-900"><span>{it.icon}</span>{it.label}</button>))}
+          </div>
+        </div>
+        <div className="h-full flex-1 bg-black/30"/>
+      </div>);
+    }
+    // ── CalendarHome ──────────────────────────────────────
+    const DAY_HEADERS=["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
+    function DayCell({day,blank,isToday,dayEvents}){
+      if(blank)return<div className="min-h-[72px] border-b border-r border-slate-100"/>;
+      const evs=dayEvents||[];
+      const income=evs.filter(e=>e.amt>0).reduce((s,e)=>s+e.amt,0);
+      const spent=evs.filter(e=>e.amt<0).reduce((s,e)=>s+Math.abs(e.amt),0);
+      return(<div className={cx("min-h-[72px] border-b border-r border-slate-100 p-1",isToday&&"bg-blue-50/40")}>
+        <div className={cx("mb-0.5 grid h-6 w-6 place-items-center rounded-full text-[11px] font-bold",isToday?"bg-blue-500 text-white":"text-slate-700")}>{day}</div>
+        {income>0&&<div className="text-[8px] font-bold text-emerald-500 leading-none mb-0.5">+{fmt(income)}</div>}
+        {spent>0&&<div className="text-[8px] font-bold text-rose-400 leading-none mb-0.5">-{fmt(spent)}</div>}
+        <div className="space-y-0.5">{evs.slice(0,3).map((e,k)=>(<div key={k} className={cx("rounded border-l-2 px-1 py-0.5 text-[8px] leading-tight",e.color)}><div className="truncate font-semibold">{e.emoji} {e.label}</div></div>))}{evs.length>3&&<div className="text-[7px] text-slate-400 font-semibold pl-1">+{evs.length-3} more</div>}</div>
+      </div>);
+    }
+    function CalendarHome({openMenu,openCash,openInsights,openWeather,openAdd,calendarEvents={},today="$0",balanceDisplay="$0",userName=""}){
+      const [viewDate,setViewDate]=useState(new Date());
+      const year=viewDate.getFullYear(),month=viewDate.getMonth();
+      const firstDayRaw=new Date(year,month,1).getDay();
+      const firstDay=(firstDayRaw+6)%7;
+      const daysInMonth=new Date(year,month+1,0).getDate();
+      const monthLabel=viewDate.toLocaleString("default",{month:"long",year:"numeric"});
+      const changeMonth=o=>setViewDate(new Date(year,month+o,1));
+      const now=new Date(),isCurrentMonth=now.getFullYear()===year&&now.getMonth()===month;
+      const cells=[];
+      for(let i=0;i<firstDay;i++)cells.push({blank:true});
+      for(let d=1;d<=daysInMonth;d++)cells.push({day:d});
+      // Build per-month events: for non-current months, filter by month index
+      const MONTH_NAMES=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+      const viewMonthKey=MONTH_NAMES[month];
+      const viewEvents=isCurrentMonth?calendarEvents:(calendarEvents.__all__||{});
+      return(<div className="flex h-full flex-col">
+        <TopBar today={today} openMenu={openMenu} openCash={openCash} openInsights={openInsights} openWeather={openWeather}/>
+        <div className="mx-3 mb-1 rounded-2xl border border-emerald-100 bg-emerald-50 px-4 py-2.5">
+          <div className="flex items-center justify-between">
+            <span className="flex items-center gap-1.5 text-sm font-bold text-emerald-700">☀️ Clear Skies</span>
+            <button onClick={openWeather} className="rounded-lg border border-emerald-200 bg-white px-2.5 py-0.5 text-xs font-semibold text-emerald-600">Edit</button>
+          </div>
+          <p className="mt-0.5 text-xs leading-snug text-emerald-700">{userName?"Hey "+userName+"! ":""}Balance: <b>{balanceDisplay}</b> — tap 💰 for breakdown</p>
+        </div>
+        <div className="flex items-center justify-center gap-3 py-1">
+          <button onClick={()=>changeMonth(-1)} className="px-2 text-lg text-slate-400">‹</button>
+          <span className="text-sm font-bold text-slate-700">{monthLabel} ▾</span>
+          <button onClick={()=>changeMonth(1)} className="px-2 text-lg text-slate-400">›</button>
+        </div>
+        <div className="flex-1 relative min-h-0">
+          <div className="absolute inset-0 overflow-y-auto" style={{paddingBottom:"82px"}}>
+            <div className="grid grid-cols-7">
+              {DAY_HEADERS.map(h=><div key={h} className="border-b border-slate-200 py-1 text-center text-[10px] font-semibold text-slate-400">{h}</div>)}
+              {cells.map((c,i)=><DayCell key={i} {...c} isToday={isCurrentMonth&&c.day===now.getDate()} dayEvents={viewEvents[c.day]||[]}/>)}
+            </div>
+          </div>
+        </div>
+        <TabBar onInsights={openInsights} balance={balanceDisplay} openAdd={openAdd}/>
+      </div>);
+    }
+
+    // ── CalendarLive ──────────────────────────────────────
+    function CalendarLive({openMenu,openCash,openInsights,openWeather,onDayTap,today="$0",balanceDisplay="$0",userName="",calendarEvents={},onScrollDir}){
+      const dows=["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
+      const now=new Date();
+      const scrollRef=useRef(null);
+      const lastTop=useRef(0);
+
+      const months=useMemo(()=>{
+        const result=[];
+        for(let i=0;i<28;i++){
+          const d=new Date(now.getFullYear(),now.getMonth()+i,1);
+          result.push({year:d.getFullYear(),month:d.getMonth()});
+        }
+        return result;
+      },[]);
+
+      const handleScroll=()=>{
+        const el=scrollRef.current;if(!el)return;
+        const st=el.scrollTop;
+        if(Math.abs(st-lastTop.current)>4){
+          onScrollDir?.(st>lastTop.current?"up":"down");
+          lastTop.current=st;
+        }
+      };
+
+      return(<div className="flex h-full flex-col bg-white">
+        <div className="flex items-center justify-between px-3 pb-1 text-slate-900" style={{paddingTop:"calc(env(safe-area-inset-top,0px) + 10px)"}}>
+          <div className="flex gap-1.5">
+            <button onClick={openMenu} className="grid h-10 w-10 place-items-center rounded-full bg-slate-100 text-slate-900 transition active:scale-90"><MenuIcon/></button>
+            <div className="grid h-10 w-10 place-items-center rounded-full bg-slate-100 text-slate-500"><ChatIcon/></div>
+          </div>
+          <button onClick={openCash} className="rounded-full bg-slate-100 px-4 py-1 text-center transition active:scale-95">
+            <div className="text-lg font-extrabold leading-none text-slate-900">{today}</div>
+            <div className="text-[10px] font-semibold text-slate-500">tap for breakdown</div>
+          </button>
+          <div className="flex gap-1.5">
+            <button onClick={openInsights} className="grid h-10 w-10 place-items-center rounded-full bg-slate-100 text-slate-500 transition active:scale-90"><BarsIcon/></button>
+            <button onClick={openWeather} className="grid h-10 w-10 place-items-center rounded-full bg-slate-100 text-slate-400 transition active:scale-90"><TrophyIcon/></button>
+          </div>
+        </div>
+        <div className="mx-3 mb-1 flex items-center gap-2 rounded-2xl border-l-4 border-emerald-500 bg-emerald-50 px-3 py-1.5 text-slate-900">
+          <span className="text-xl">☀️</span>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-extrabold text-emerald-600">Clear Skies</span>
+              <button onClick={openWeather} className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">Edit</button>
+            </div>
+            <p className="text-[11px] font-medium text-emerald-700 truncate">{userName?"Hey "+userName+"! ":""}Balance: <b>{balanceDisplay}</b></p>
+          </div>
+        </div>
+        <div className="grid grid-cols-7 border-b border-t border-slate-100 bg-white">
+          {dows.map(d=><div key={d} className="py-1 text-center text-[10px] font-bold uppercase tracking-wider text-slate-400">{d}</div>)}
+        </div>
+        <div ref={scrollRef} className="flex-1 overflow-y-auto" style={{paddingBottom:"calc(env(safe-area-inset-bottom,0px) + 80px)"}} onScroll={handleScroll}>
+          {months.map(({year,month})=>{
+            const isCur=now.getFullYear()===year&&now.getMonth()===month;
+            const firstDay=(new Date(year,month,1).getDay()+6)%7;
+            const daysInMonth=new Date(year,month+1,0).getDate();
+            const label=new Date(year,month,1).toLocaleString("default",{month:"long",year:"numeric"});
+            const cells=[];
+            for(let i=0;i<firstDay;i++)cells.push({blank:true});
+            for(let d=1;d<=daysInMonth;d++)cells.push({day:d});
+            return(<div key={`${year}-${month}`}>
+              <div className="px-3 py-1.5 bg-slate-50 border-b border-slate-100">
+                <span className="text-xs font-extrabold uppercase tracking-wider text-slate-500">{label}</span>
+              </div>
+              <div className="grid grid-cols-7">
+                {cells.map((c,i)=>{
+                  if(c.blank)return<div key={i} className="border-b border-r border-slate-100 min-h-[68px]"/>;
+                  const liveEvs=(isCur?calendarEvents[c.day]:[])||[];
+                  const isToday=isCur&&c.day===now.getDate();
+                  return(<button key={i} onClick={()=>onDayTap?.(month,c.day)} className="border-b border-r border-slate-100 p-1 text-left align-top overflow-hidden min-h-[68px] transition active:bg-slate-50">
+                    <span className={cx("grid h-6 w-6 place-items-center rounded-full text-xs font-bold",isToday?"bg-blue-500 text-white":"text-slate-800")}>{c.day}</span>
+                    <div className="mt-0.5 space-y-0.5">
+                      {liveEvs.slice(0,2).map((e,ki)=>(<div key={ki} className={cx("rounded border-l-2 px-1 py-0.5",e.color)}><div className="truncate text-[8px] font-bold text-slate-800">{e.emoji} {e.label}</div></div>))}
+                      {liveEvs.length>2&&<div className="text-[7px] text-slate-400 pl-0.5">+{liveEvs.length-2}</div>}
+                    </div>
+                  </button>);
+                })}
+              </div>
+            </div>);
+          })}
+        </div>
+      </div>);
+    }
+
+    // ── QuickAddMenu ──────────────────────────────────────
+    function QuickAddMenu({onClose,onExpense,onIncome,onGoal}){
+      const [vis,setVis]=useState(false);
+      useEffect(()=>{const t=setTimeout(()=>setVis(true),10);return()=>clearTimeout(t);},[]);
+      const pills=[
+        {label:"Expense",emoji:"💳",cb:onExpense},
+        {label:"Income", emoji:"💰",cb:onIncome},
+        {label:"Goal",   emoji:"🌱",cb:onGoal},
+      ];
+      return(
+        <div className="absolute inset-0 z-40" onClick={onClose}>
+          <div className="absolute inset-0 transition-opacity duration-200" style={{background:vis?"rgba(0,0,0,0.25)":"rgba(0,0,0,0)",backdropFilter:vis?"blur(2px)":"none"}}/>
+          <div className="absolute bottom-0 left-0 right-0 flex flex-col items-center gap-3" style={{paddingBottom:"calc(env(safe-area-inset-bottom,0px) + 84px)"}}>
+            {pills.map((p,i)=>(
+              <button key={p.label} onClick={e=>{e.stopPropagation();onClose();p.cb();}}
+                className="flex items-center gap-5 rounded-full bg-white shadow-2xl text-slate-900 font-bold text-xl active:scale-95 transition-transform"
+                style={{width:"72%",padding:"17px 30px",
+                  transform:vis?"translateY(0) scale(1)":`translateY(70px) scale(0.85)`,
+                  opacity:vis?1:0,
+                  transition:`transform 0.4s cubic-bezier(0.34,1.56,0.64,1) ${(2-i)*0.07}s, opacity 0.22s ease ${(2-i)*0.07}s`
+                }}>
+                <span className="text-3xl">{p.emoji}</span>
+                <span className="text-2xl">{p.label}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    // ── AddTransaction overlay ────────────────────────────
+    function AddTransaction({onClose,onAdd,initialType}){
+      const [type,setType]=useState(initialType||"expense");
+      const [amt,setAmt]=useState("");
+      const [label,setLabel]=useState("");
+      const [sel,setSel]=useState("🛒");
+      const EMOJIS=["🛒","☕","🍽️","🚗","🎬","💊","🏠","✈️","🎮","👕","💰","📱","🎵","🌐","⚡","🏋️"];
+      const submit=()=>{if(!amt||!label)return;onAdd({id:Date.now(),type,emoji:sel,label,amt:Number(amt),date:"Today",category:type==="income"?"Income":"Expense"});onClose();};
+      return(<Sheet2 title="Add Transaction" sub="Track your money" onClose={onClose} footer={<><FlowBack onClick={onClose}/><FlowNext onClick={submit} label="Add ✓"/></>}>
+        <div className="space-y-4">
+          <div className="flex rounded-2xl bg-slate-100 p-1">
+            {["expense","income"].map(t=>(<button key={t} onClick={()=>setType(t)} className={cx("flex-1 rounded-xl py-3 font-bold text-sm capitalize transition",type===t?(t==="expense"?"bg-rose-500 text-white":"bg-emerald-500 text-white"):"text-slate-500")}>{t}</button>))}
+          </div>
+          <div>
+            <p className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-400">Emoji</p>
+            <div className="flex flex-wrap gap-2">{EMOJIS.map(e=>(<button key={e} onClick={()=>setSel(e)} className={cx("h-10 w-10 rounded-xl text-xl",sel===e?"bg-blue-100 ring-2 ring-blue-400":"bg-slate-100")}>{e}</button>))}</div>
+          </div>
+          <div>
+            <label className="text-xs font-bold uppercase tracking-wider text-slate-400">Label</label>
+            <input value={label} onChange={e=>setLabel(e.target.value)} placeholder="e.g. Coffee, Paycheck…" className="mt-1 w-full rounded-2xl border border-slate-200 px-4 py-3 text-slate-900 outline-none focus:border-blue-400"/>
+          </div>
+          <div>
+            <label className="text-xs font-bold uppercase tracking-wider text-slate-400">Amount ($)</label>
+            <input type="text" inputMode="decimal" value={amt} onChange={e=>setAmt(e.target.value)} placeholder="0.00" className="mt-1 w-full rounded-2xl border border-slate-200 px-4 py-4 text-2xl font-bold text-slate-900 outline-none focus:border-blue-400"/>
+          </div>
+        </div>
+      </Sheet2>);
+    }
+
+    // ── History tab ───────────────────────────────────────
+    function History({openMenu,openCash,openInsights,openWeather,openAdd,transactions,today="$0"}){
+      const cats=["All","Income","Expense","Food","Bills","Transport","Health"];
+      const [filter,setFilter]=useState("All");
+      const filtered=filter==="All"?transactions:transactions.filter(t=>{
+        if(filter==="Income")return t.type==="income";
+        if(filter==="Expense")return t.type==="expense"&&(!t.category||t.category==="Expense");
+        return t.category===filter||(filter==="Transport"&&t.category==="Transportation");
+      });
+      return(<div className="flex h-full flex-col">
+        <TopBar today={today} openMenu={openMenu} openCash={openCash} openInsights={openInsights} openWeather={openWeather}/>
+        <div className="px-4 pt-2 pb-2">
+          <h1 className="text-2xl font-extrabold text-slate-900">History</h1>
+          <div className="mt-2 flex gap-2">{cats.map(c=>(<button key={c} onClick={()=>setFilter(c)} className={cx("rounded-full px-4 py-1.5 text-sm font-semibold transition",filter===c?"bg-blue-500 text-white":"bg-slate-100 text-slate-600")}>{c}</button>))}</div>
+        </div>
+        <div className="flex-1 overflow-y-auto px-4" style={{paddingBottom:"calc(env(safe-area-inset-bottom,0px) + 88px)"}}>
+          {filtered.length===0&&(<div className="flex flex-col items-center justify-center py-20 text-slate-400"><div className="text-5xl mb-3">📭</div><p className="font-semibold">No transactions yet</p><p className="text-sm mt-1">Tap + to add one</p></div>)}
+          {filtered.map(tx=>(<div key={tx.id} className="flex items-center justify-between border-b border-slate-100 py-3">
+            <div className="flex items-center gap-3">
+              <div className="grid h-11 w-11 place-items-center rounded-2xl bg-slate-100 text-xl">{tx.emoji}</div>
+              <div><div className="font-bold text-slate-900">{tx.label}</div><div className="text-xs text-slate-400">{tx.date}</div></div>
+            </div>
+            <div className={cx("font-bold",tx.type==="income"?"text-emerald-500":"text-rose-500")}>{tx.type==="income"?"+":"-"}{money(tx.amt)}</div>
+          </div>))}
+        </div>
+      </div>);
+    }
+
+    // ── Budget ────────────────────────────────────────────
+    function EditBudgetSheet({cat,onSave,onClose}){
+      const [val,setVal]=useState(String(cat.planned));
+      return(<Sheet2 title={`Edit ${cat.name}`} sub="Update your monthly budget" onClose={onClose} footer={<><FlowBack onClick={onClose}/><FlowNext onClick={()=>onSave(Number(val)||cat.planned)} label="Save"/></>}>
+        <div className="space-y-5">
+          <div className="flex items-center gap-4 rounded-2xl bg-slate-50 p-4"><span className="text-3xl">{cat.icon}</span><div><div className="font-bold text-slate-900">{cat.name}</div><div className="text-sm text-slate-500">Currently spent: {money(cat.used)}</div></div></div>
+          <div><label className="text-xs font-bold uppercase tracking-wider text-slate-400">Monthly Budget ($)</label><input type="text" inputMode="decimal" value={val} onChange={e=>setVal(e.target.value)} className="mt-2 w-full rounded-2xl border border-slate-200 px-4 py-4 text-3xl font-bold text-slate-900 outline-none focus:border-blue-400"/></div>
+          <div className="rounded-2xl bg-blue-50 p-3 text-sm text-blue-700">💡 At this rate you'll use <b>{Math.round((cat.used/(Number(val)||1))*100)}%</b> of your budget.</div>
+        </div>
+      </Sheet2>);
+    }
+    function Budget({openMenu,openCash,openInsights,openWeather,openAdd,liveCategories,today="$0"}){
+      const [cats,setCats]=useState(()=>liveCategories||CATEGORIES);
+      useEffect(()=>{
+        if(!liveCategories)return;
+        setCats(prev=>liveCategories.map(lc=>{const ex=prev.find(p=>p.name===lc.name);return ex?{...lc,planned:ex.planned}:lc;}));
+      },[liveCategories]);
+      const [editing,setEditing]=useState(null);
+      const save=(name,planned)=>{setCats(p=>p.map(c=>c.name===name?{...c,planned,pct:Math.round((c.used/planned)*100)}:c));setEditing(null);};
+      return(<div className="flex h-full flex-col">
+        <TopBar today={today} openMenu={openMenu} openCash={openCash} openInsights={openInsights} openWeather={openWeather}/>
+        <div className="flex-1 overflow-y-auto px-4" style={{paddingBottom:"calc(env(safe-area-inset-bottom,0px) + 88px)"}}>
+          <div className="flex items-center justify-between py-4"><h1 className="text-2xl font-extrabold text-slate-900">Budget</h1></div>
+          {cats.map(c=>(<button key={c.name} onClick={()=>setEditing(c)} className="mb-3 w-full rounded-2xl bg-slate-50 p-4 text-left">
+            <div className="flex items-center gap-3">
+              <div className="grid h-12 w-12 place-items-center rounded-2xl bg-white text-xl shadow-sm">{c.icon}</div>
+              <div className="flex-1"><div className="font-bold text-slate-900">{c.name}</div><div className="text-xs text-slate-500">Budget: {money(c.planned)}</div></div>
+              <div className="text-right"><div className={cx("font-bold text-sm",c.text)}>{money(c.used)}</div><div className="text-xs text-slate-400">spent</div></div>
+            </div>
+            <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-200"><div className={cx("h-full rounded-full",c.bar)} style={{width:`${Math.min(c.pct,100)}%`}}/></div>
+            <div className="mt-1 flex justify-between text-xs text-slate-400"><span>{c.pct}% used</span><span>{money(Math.max(c.planned-c.used,0))} left</span></div>
+          </button>))}
+        </div>
+        {editing&&<EditBudgetSheet cat={editing} onSave={p=>save(editing.name,p)} onClose={()=>setEditing(null)}/>}
+      </div>);
+    }
+
+    // ── Debt ──────────────────────────────────────────────
+    function DebtSheet({debt,onPay,onClose}){
+      const [pmt,setPmt]=useState(String(debt.pmt));
+      return(<Sheet2 title={debt.name} sub={`${debt.tag} · ${debt.apr}% APR`} onClose={onClose} footer={<><FlowBack onClick={onClose}/><FlowNext onClick={()=>onPay(Number(pmt)||0)} label="Make Payment"/></>}>
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-3">
+            {[["Balance",money(debt.total-debt.paid)],["Paid",money(debt.paid)],["APR",`${debt.apr}%`],["Monthly",money(debt.pmt)]].map(([l,v])=>(<div key={l} className="rounded-2xl bg-slate-50 p-3"><div className="text-xs font-bold uppercase text-slate-400">{l}</div><div className="mt-1 font-extrabold text-slate-900">{v}</div></div>))}
+          </div>
+          <div className="rounded-2xl bg-slate-50 p-4">
+            <div className="flex justify-between text-sm font-bold text-slate-700 mb-2"><span>Progress</span><span className="text-emerald-600">{debt.pct}% paid</span></div>
+            <div className="h-3 overflow-hidden rounded-full bg-slate-200"><div className="h-full rounded-full bg-emerald-500 transition-all" style={{width:`${debt.pct}%`}}/></div>
+          </div>
+          <div><label className="text-xs font-bold uppercase tracking-wider text-slate-400">Payment Amount ($)</label><input type="text" inputMode="decimal" value={pmt} onChange={e=>setPmt(e.target.value)} className="mt-2 w-full rounded-2xl border border-slate-200 px-4 py-4 text-2xl font-bold text-slate-900 outline-none focus:border-blue-400"/></div>
+        </div>
+      </Sheet2>);
+    }
+    function AddDebtSheet({onSave,onClose}){
+      const [name,setName]=useState("");const [total,setTotal]=useState("");const [apr,setApr]=useState("");const [pmt,setPmt]=useState("");const [icon,setIcon]=useState("💳");
+      const ICONS=["💳","🚗","🎓","🏠","💊","📱","🛍️"];
+      const submit=()=>{if(!name||!total)return;onSave({icon,name,tag:"Loan",pct:0,paid:0,total:Number(total),apr:Number(apr)||0,pmt:Number(pmt)||0});onClose();};
+      return(<Sheet2 title="Add Debt" sub="Track a new debt" onClose={onClose} footer={<><FlowBack onClick={onClose}/><FlowNext onClick={submit} label="Add Debt"/></>}>
+        <div className="space-y-4">
+          <div className="flex gap-2 flex-wrap">{ICONS.map(i=>(<button key={i} onClick={()=>setIcon(i)} className={cx("h-12 w-12 rounded-2xl text-2xl",icon===i?"bg-blue-100 ring-2 ring-blue-400":"bg-slate-100")}>{i}</button>))}</div>
+          {[["Debt Name","","e.g. Car Loan",name,setName],["Total Balance ($)","decimal","0.00",total,setTotal],["APR (%)","decimal","0.0",apr,setApr],["Monthly Payment ($)","decimal","0.00",pmt,setPmt]].map(([l,mode,ph,v,s])=>(<div key={l}><label className="text-xs font-bold uppercase tracking-wider text-slate-400">{l}</label><input type="text" inputMode={mode||"text"} value={v} onChange={e=>s(e.target.value)} placeholder={ph} className="mt-1 w-full rounded-2xl border border-slate-200 px-4 py-3 text-slate-900 outline-none focus:border-blue-400"/></div>))}
+        </div>
+      </Sheet2>);
+    }
+    function Debt({openMenu,openCash,openInsights,openWeather,openAdd,today="$0"}){
+      const [debts,setDebts]=useState(DEBTS);
+      const [editing,setEditing]=useState(null);
+      const [adding,setAdding]=useState(false);
+      const makePayment=(name,pmt)=>{setDebts(p=>p.map(d=>{if(d.name!==name)return d;const paid=Math.min(d.paid+pmt,d.total);return{...d,paid,pct:Math.round((paid/d.total)*100)};}));setEditing(null);};
+      return(<div className="flex h-full flex-col">
+        <TopBar today={today} openMenu={openMenu} openCash={openCash} openInsights={openInsights} openWeather={openWeather}/>
+        <div className="flex-1 overflow-y-auto px-4" style={{paddingBottom:"calc(env(safe-area-inset-bottom,0px) + 88px)"}}>
+          <div className="flex items-center justify-between py-4"><h1 className="text-2xl font-extrabold text-slate-900">Debts</h1><button onClick={()=>setAdding(true)} className="grid h-9 w-9 place-items-center rounded-full bg-blue-500 text-white text-xl">+</button></div>
+          {debts.length===0&&<div className="flex flex-col items-center py-16 text-slate-400"><div className="text-5xl mb-3">🎉</div><p className="font-semibold">Debt free!</p></div>}
+          {debts.map(d=>(<button key={d.name} onClick={()=>setEditing(d)} className="mb-3 w-full rounded-2xl bg-slate-50 p-4 text-left">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3"><span className="text-2xl">{d.icon}</span><div><div className="font-bold text-slate-900">{d.name}</div><div className="text-xs text-slate-500">{d.tag} · {d.apr}% APR</div></div></div>
+              <div className="text-right"><div className="font-extrabold text-slate-900">{money(d.total-d.paid)}</div><div className="text-xs text-slate-400">remaining</div></div>
+            </div>
+            <div className="mt-3 flex items-center gap-2"><div className="h-2 flex-1 overflow-hidden rounded-full bg-slate-200"><div className="h-full rounded-full bg-emerald-500" style={{width:`${d.pct}%`}}/></div><span className="text-sm font-bold text-emerald-600">{d.pct}%</span></div>
+          </button>))}
+        </div>
+        {editing&&<DebtSheet debt={editing} onPay={p=>makePayment(editing.name,p)} onClose={()=>setEditing(null)}/>}
+        {adding&&<AddDebtSheet onSave={d=>{setDebts(p=>[...p,d]);setAdding(false);}} onClose={()=>setAdding(false)}/>}
+      </div>);
+    }
+
+    // ── Goals ─────────────────────────────────────────────
+    function GoalSheet({goal,onContribute,onClose}){
+      const [amt,setAmt]=useState("");
+      return(<Sheet2 title={goal.name} sub={`${goal.kind} · ${goal.away}`} onClose={onClose} footer={<><FlowBack onClick={onClose}/><FlowNext onClick={()=>onContribute(Number(amt)||0)} label="Add Funds"/></>}>
+        <div className="space-y-4">
+          <div className="flex justify-between rounded-2xl bg-slate-50 p-4">
+            <div className="text-center"><div className="text-xs font-bold uppercase text-slate-400">Saved</div><div className="mt-1 text-2xl font-extrabold text-slate-900">{money(goal.have)}</div></div>
+            <div className="text-center"><div className="text-xs font-bold uppercase text-slate-400">Target</div><div className="mt-1 text-2xl font-extrabold text-slate-900">{money(goal.target)}</div></div>
+            <div className="text-center"><div className="text-xs font-bold uppercase text-slate-400">Left</div><div className="mt-1 text-2xl font-extrabold text-blue-500">{money(goal.target-goal.have)}</div></div>
+          </div>
+          <div className="rounded-2xl bg-slate-50 p-4"><div className="flex justify-between text-sm font-bold mb-2"><span className="text-slate-700">Progress</span><span className="text-blue-500">{goal.pct}%</span></div><div className="h-3 overflow-hidden rounded-full bg-slate-200"><div className={cx("h-full rounded-full transition-all",goal.bar)} style={{width:`${goal.pct}%`}}/></div></div>
+          <div><label className="text-xs font-bold uppercase tracking-wider text-slate-400">Add Contribution ($)</label><input type="text" inputMode="decimal" value={amt} onChange={e=>setAmt(e.target.value)} placeholder="0.00" className="mt-2 w-full rounded-2xl border border-slate-200 px-4 py-4 text-2xl font-bold text-slate-900 outline-none focus:border-blue-400"/></div>
+          <div className="rounded-2xl bg-slate-50 p-3 text-sm text-slate-600">📅 Cadence: <b>{goal.cadence}</b></div>
+        </div>
+      </Sheet2>);
+    }
+    function AddGoalSheet({onSave,onClose}){
+      const [name,setName]=useState("");const [target,setTarget]=useState("");const [icon,setIcon]=useState("🎯");const [kind,setKind]=useState("Savings");
+      const ICONS=["🎯","✈️","🏠","🚗","🎓","💍","🌴","🛡️","📱","🏋️"];
+      const submit=()=>{if(!name||!target)return;onSave({icon,name,kind,away:"TBD",have:0,target:Number(target),pct:0,bar:"bg-blue-500",cadence:"Set a cadence"});onClose();};
+      return(<Sheet2 title="New Goal" sub="What are you saving for?" onClose={onClose} footer={<><FlowBack onClick={onClose}/><FlowNext onClick={submit} label="Create Goal"/></>}>
+        <div className="space-y-4">
+          <div className="flex gap-2 flex-wrap">{ICONS.map(i=>(<button key={i} onClick={()=>setIcon(i)} className={cx("h-12 w-12 rounded-2xl text-2xl",icon===i?"bg-blue-100 ring-2 ring-blue-400":"bg-slate-100")}>{i}</button>))}</div>
+          <div className="flex rounded-2xl bg-slate-100 p-1">{["Savings","Debt","Investment"].map(k=>(<button key={k} onClick={()=>setKind(k)} className={cx("flex-1 rounded-xl py-2 text-sm font-bold transition",kind===k?"bg-white shadow text-slate-900":"text-slate-500")}>{k}</button>))}</div>
+          <div><label className="text-xs font-bold uppercase tracking-wider text-slate-400">Goal Name</label><input value={name} onChange={e=>setName(e.target.value)} placeholder="e.g. Vacation Fund" className="mt-1 w-full rounded-2xl border border-slate-200 px-4 py-3 text-slate-900 outline-none focus:border-blue-400"/></div>
+          <div><label className="text-xs font-bold uppercase tracking-wider text-slate-400">Target Amount ($)</label><input type="text" inputMode="decimal" value={target} onChange={e=>setTarget(e.target.value)} placeholder="0.00" className="mt-1 w-full rounded-2xl border border-slate-200 px-4 py-4 text-2xl font-bold text-slate-900 outline-none focus:border-blue-400"/></div>
+        </div>
+      </Sheet2>);
+    }
+    function Goals({openMenu,openCash,openInsights,openWeather,openAdd,today="$0",goals,setGoals}){
+      const [editing,setEditing]=useState(null);
+      const [adding,setAdding]=useState(false);
+      const contribute=(name,amt)=>{setGoals(p=>p.map(g=>{if(g.name!==name)return g;const have=Math.min(g.have+amt,g.target);return{...g,have,pct:Math.round((have/g.target)*100)};}));setEditing(null);};
+      return(<div className="flex h-full flex-col">
+        <TopBar today={today} openMenu={openMenu} openCash={openCash} openInsights={openInsights} openWeather={openWeather}/>
+        <div className="flex-1 overflow-y-auto px-4" style={{paddingBottom:"calc(env(safe-area-inset-bottom,0px) + 88px)"}}>
+          <div className="flex items-center justify-between py-4"><h1 className="text-2xl font-extrabold text-slate-900">Goals</h1><button onClick={()=>setAdding(true)} className="grid h-9 w-9 place-items-center rounded-full bg-blue-500 text-white text-xl">+</button></div>
+          {goals.map(g=>(<button key={g.name} onClick={()=>setEditing(g)} className="mb-3 w-full rounded-2xl bg-slate-50 p-4 text-left">
+            <div className="flex items-start justify-between">
+              <div className="flex items-center gap-3"><span className="text-2xl">{g.icon}</span><div><div className="font-bold text-slate-900">{g.name}</div><div className="text-xs text-slate-400">{g.kind} · {g.away}</div></div></div>
+              <div className="text-right"><div className="text-sm font-extrabold text-slate-900">{money(g.have)}</div><div className="text-xs text-slate-400">of {money(g.target)}</div></div>
+            </div>
+            <div className="mt-3 flex items-center gap-2"><div className="h-2 flex-1 overflow-hidden rounded-full bg-slate-200"><div className={cx("h-full rounded-full",g.bar)} style={{width:`${g.pct}%`}}/></div><span className="text-sm font-bold text-slate-600">{g.pct}%</span></div>
+            <div className="mt-2 text-xs text-slate-400">{g.cadence}</div>
+          </button>))}
+        </div>
+        {editing&&<GoalSheet goal={editing} onContribute={a=>contribute(editing.name,a)} onClose={()=>setEditing(null)}/>}
+        {adding&&<AddGoalSheet onSave={g=>{setGoals(p=>[...p,g]);setAdding(false);}} onClose={()=>setAdding(false)}/>}
+      </div>);
+    }
+
+    // ── Settings ──────────────────────────────────────────
+    const LANGUAGES=[["🇺🇸","English","EN"],["🇪🇸","Español","ES"],["🇫🇷","Français","FR"],["🇩🇪","Deutsch","DE"],["🇮🇹","Italiano","IT"],["🇧🇷","Português","PT"],["🇯🇵","日本語","JA"],["🇨🇳","中文","ZH"]];
+    const CURRENCIES=[["$","US Dollar","USD"],["€","Euro","EUR"],["£","Pound","GBP"],["¥","Yen","JPY"],["₩","Won","KRW"],["₦","Naira","NGN"],["C$","CAD","CAD"],["A$","AUD","AUD"]];
+    function Settings({openMenu,dark,setDark,accent,setAccent,resetApp,userLang="English",setUserLang}){
+      const [simplified,setSimplified]=useState(true);
+      const [projected,setProjected]=useState(true);
+      const [morning,setMorning]=useState(true);
+      const [evening,setEvening]=useState(true);
+      const [reminders,setReminders]=useState(true);
+      const [langSheet,setLangSheet]=useState(false);
+      const [curSheet,setCurSheet]=useState(false);
+      const [lang,setLang]=useState(userLang);
+      const [cur,setCur]=useState("USD");
+      const [confirmReset,setConfirmReset]=useState(false);
+      return(<div className="flex h-full flex-col overflow-y-auto pb-10 text-slate-900" style={{paddingTop:"calc(env(safe-area-inset-top,0px) + 8px)"}}>
+        <div className="flex items-center justify-between px-5">
+          <button onClick={openMenu} className="grid h-11 w-11 place-items-center rounded-full bg-slate-100 text-xl">≡</button>
+          <h1 className="text-xl font-extrabold">Settings</h1>
+          <span className="h-11 w-11"/>
+        </div>
+        <h2 className="mt-5 px-5 text-xl font-extrabold">Appearance</h2>
+        <div className="mt-3 mx-5 divide-y rounded-2xl bg-slate-50 px-4">
+          <button onClick={()=>setDark(false)} className="flex w-full items-center justify-between py-4 font-bold">☀️ Light {!dark&&<span className="text-blue-500">✓</span>}</button>
+          <button onClick={()=>setDark(true)} className="flex w-full items-center justify-between py-4 font-bold">🌙 Dark {dark&&<span className="text-blue-500">✓</span>}</button>
+        </div>
+        <p className="mt-4 px-5 text-sm font-semibold text-slate-500">Accent Color</p>
+        <div className="mt-2 mx-5 flex flex-wrap gap-3 rounded-2xl bg-slate-50 p-4">
+          {ACCENTS.map(c=>(<button key={c} onClick={()=>setAccent(c)} style={{background:c}} className={cx("grid h-10 w-10 place-items-center rounded-full text-white transition active:scale-90",accent===c&&"ring-2 ring-offset-2 ring-slate-900")}>{accent===c&&"✓"}</button>))}
+        </div>
+        <h2 className="mt-6 px-5 text-xl font-extrabold">General</h2>
+        <div className="mt-3 mx-5 divide-y rounded-2xl bg-slate-50 px-4">
+          <button onClick={()=>setLangSheet(true)} className="flex w-full items-center justify-between py-4"><div><div className="font-bold text-left">🌐 Language</div><div className="text-sm text-slate-500 text-left">{lang}</div></div><span className="text-slate-400">›</span></button>
+          <button onClick={()=>setCurSheet(true)} className="flex w-full items-center justify-between py-4"><div><div className="font-bold text-left">💵 Currency</div><div className="text-sm text-slate-500 text-left">{cur}</div></div><span className="text-slate-400">›</span></button>
+          <ToggleRow l="Simplified Display" sub="Round amounts to whole numbers" on={simplified} set={setSimplified}/>
+          <ToggleRow l="Projected Balances" sub="Show projections on calendar days" on={projected} set={setProjected}/>
+        </div>
+        <h2 className="mt-6 px-5 text-xl font-extrabold">Notifications</h2>
+        <div className="mt-3 mx-5 divide-y rounded-2xl bg-slate-50 px-4">
+          <ToggleRow l="🌞 Morning Update" sub="Daily balance update" on={morning} set={setMorning}/>
+          <Row l="🕐 Update Time" r="8:00 AM ›"/>
+          <ToggleRow l="🌙 Evening Update" sub="Nightly financial outlook" on={evening} set={setEvening}/>
+          <ToggleRow l="💰 Payment Reminders" sub="Bills and upcoming payments" on={reminders} set={setReminders}/>
+        </div>
+        <div className="mt-6 mx-5 mb-4">
+          <button onClick={()=>setConfirmReset(true)} className="w-full rounded-2xl bg-rose-50 p-4 text-left">
+            <div className="font-bold text-rose-500">↻ Reset &amp; Start Fresh</div>
+            <p className="mt-1 text-sm text-slate-500">Clear all data and restart onboarding.</p>
+          </button>
+        </div>
+        {langSheet&&(<div className="absolute inset-0 z-30 flex flex-col justify-end bg-black/30"><div className="rounded-t-[36px] bg-white px-6 pt-7" style={{paddingBottom:"calc(env(safe-area-inset-bottom,20px)+8px)"}}><h1 className="text-2xl font-extrabold mb-4">Language</h1><div className="space-y-2 overflow-y-auto max-h-[60vh]">{LANGUAGES.map(([fl,name,code])=>(<button key={code} onClick={()=>{setLang(name);setUserLang?.(name);setLangSheet(false);}} className={cx("flex w-full items-center justify-between rounded-2xl px-4 py-4",lang===name?"bg-blue-50 border border-blue-200":"bg-slate-50")}><span className="flex items-center gap-3 font-semibold"><span className="text-2xl">{fl}</span>{name}</span>{lang===name&&<span className="text-blue-500 font-bold">✓</span>}</button>))}</div><button onClick={()=>setLangSheet(false)} className="mt-4 w-full rounded-2xl bg-slate-100 py-4 font-bold text-slate-600">Cancel</button></div></div>)}
+        {curSheet&&(<div className="absolute inset-0 z-30 flex flex-col justify-end bg-black/30"><div className="rounded-t-[36px] bg-white px-6 pt-7" style={{paddingBottom:"calc(env(safe-area-inset-bottom,20px)+8px)"}}><h1 className="text-2xl font-extrabold mb-4">Currency</h1><div className="space-y-2 overflow-y-auto max-h-[60vh]">{CURRENCIES.map(([sym,name,code])=>(<button key={code} onClick={()=>{setCur(code);setCurSheet(false);}} className={cx("flex w-full items-center justify-between rounded-2xl px-4 py-4",cur===code?"bg-blue-50 border border-blue-200":"bg-slate-50")}><span className="flex items-center gap-3 font-semibold"><span className="w-8 text-xl font-bold text-slate-500">{sym}</span>{name} <span className="text-slate-400 text-sm">{code}</span></span>{cur===code&&<span className="text-blue-500 font-bold">✓</span>}</button>))}</div><button onClick={()=>setCurSheet(false)} className="mt-4 w-full rounded-2xl bg-slate-100 py-4 font-bold text-slate-600">Cancel</button></div></div>)}
+        {confirmReset&&(<div className="absolute inset-0 z-30 flex items-end bg-black/30"><div className="w-full rounded-t-[36px] bg-white p-6 text-center" style={{paddingBottom:"calc(env(safe-area-inset-bottom,20px)+8px)"}}><h2 className="text-2xl font-extrabold text-slate-900">Reset App?</h2><p className="mt-2 text-slate-500">This will clear all your data and restart setup.</p><div className="mt-6 flex gap-3"><button onClick={()=>setConfirmReset(false)} className="flex-1 rounded-2xl bg-slate-100 py-4 font-bold text-slate-600">Cancel</button><button onClick={()=>{setConfirmReset(false);resetApp();}} className="flex-1 rounded-2xl bg-rose-500 py-4 font-bold text-white">Reset</button></div></div></div>)}
+      </div>);
+    }
+
+    // ── Insights ──────────────────────────────────────────
+    function Insights({onClose}){
+      const pts=[10,18,16,28,30,42,40,55,52,68,66,80,78,92,96];
+      const W=320,H=90,max=100;
+      const path=pts.map((p,i)=>`${(i/(pts.length-1))*W},${H-(p/max)*H}`).join(" ");
+      return(<div className="flex h-full flex-col overflow-y-auto px-5 pb-10 text-slate-900" style={{paddingTop:"calc(env(safe-area-inset-top,0px) + 16px)"}}>
+        <div className="flex items-center justify-between">
+          <button onClick={onClose} className="grid h-10 w-10 place-items-center rounded-full bg-slate-100 text-slate-500 text-xl">✕</button>
+          <h1 className="text-2xl font-extrabold">Insights</h1>
+          <span className="rounded-xl border px-3 py-1.5 text-sm font-semibold text-slate-600">✎ Edit</span>
+        </div>
+        <div className="mt-4 rounded-2xl bg-slate-50 p-5">
+          <div className="flex items-center justify-between"><span className="text-lg font-bold">🥧 Spending Report</span><span className="text-sm text-slate-500">May 17–23</span></div>
+          <div className="my-3 h-1.5 rounded-full bg-slate-100 overflow-hidden"><div className="h-full bg-sky-400 w-[60%]"/></div>
+          <div className="flex items-center justify-between py-1 text-slate-700"><span>🚗 Transportation</span><span className="font-bold">$400</span></div>
+          <div className="mt-2 flex items-center justify-between border-t pt-2"><span className="font-bold">Total Spent</span><span className="font-extrabold text-rose-500">$400</span></div>
+        </div>
+        <div className="mt-4 rounded-2xl bg-slate-50 p-5">
+          <span className="text-lg font-bold">📈 Projected Balance</span>
+          <div className="mt-2 text-5xl font-extrabold text-blue-500">$19.7k</div>
+          <div className="text-sm font-semibold text-slate-500 uppercase tracking-wider">in 6 months</div>
+          <div className="font-bold text-blue-500">↑177.7% <span className="text-slate-400 font-normal">from $7.1k</span></div>
+          <svg viewBox={`0 0 ${W} ${H}`} className="mt-4 w-full h-24 overflow-visible">
+            <polyline points={path} fill="none" stroke="#3b82f6" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+          <div className="mt-2 flex items-center justify-between text-xs font-bold text-slate-400">
+            <span>MAY 22</span><span className="rounded-full border border-slate-200 bg-white px-3 py-1">6 MONTHS ⌄</span><span>NOV 22</span>
+          </div>
+        </div>
+        <div className="mt-4 rounded-2xl bg-slate-50 p-5">
+          <div className="flex items-center justify-between"><span className="text-lg font-bold">👛 Net Worth</span><span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-bold text-emerald-600">↗ 2.5%</span></div>
+          <div className="mt-2 text-4xl font-extrabold">$7,500.00</div>
+          <div className="mt-6 flex justify-center">
+            <div className="relative grid h-40 w-40 place-items-center rounded-full border-[14px] border-slate-200">
+              <div className="text-center"><div className="text-2xl font-extrabold text-blue-600">100%</div><div className="text-xs font-bold text-slate-400 uppercase tracking-widest">Assets</div></div>
+            </div>
+          </div>
+        </div>
+      </div>);
+    }
+
+    // ── CashBalance ───────────────────────────────────────
+    function CashBalance({onClose,connectedBanks=[],totalBalance=7500,transactions=[]}){
+      const [tab,setTab]=useState("Accounts");
+      const baseAccounts=[{name:"Savings",balance:5000,type:"savings"},{name:"Checking",balance:2500,type:"checking"}];
+      const allAccounts=[...baseAccounts,...connectedBanks.flatMap(cb=>cb.data.accounts.map(a=>({...a,bankName:cb.bank.name,bankColor:cb.bank.color,bankIcon:cb.bank.icon})))];
+      const totalIncome=transactions.filter(t=>t.type==="income").reduce((s,t)=>s+t.amt,0);
+      const totalSpent=transactions.filter(t=>t.type==="expense").reduce((s,t)=>s+t.amt,0);
+      return(
+        <div className="flex h-full flex-col" style={{background:"#f2f2f7",paddingTop:"calc(env(safe-area-inset-top,50px) + 12px)"}}>
+          {/* Header */}
+          <div className="relative flex items-center justify-center px-5 pb-3">
+            <span className="text-xs font-bold tracking-[0.15em] text-slate-500 uppercase">Cash Balance</span>
+            <button onClick={onClose} className="absolute right-5 grid h-10 w-10 place-items-center rounded-full bg-white shadow-md text-slate-500 font-bold text-base">✕</button>
+          </div>
+          {/* Balance */}
+          <div className="flex flex-col items-center px-5 pb-5">
+            <div className="text-5xl font-extrabold text-slate-900 tracking-tight">{money(totalBalance)}</div>
+            <div className="mt-3 flex items-center gap-1.5 rounded-full bg-emerald-100 px-4 py-1.5 text-sm font-semibold text-emerald-700">
+              <span>☀️</span><span>Clear Skies — {money(totalBalance)} balance</span>
+            </div>
+          </div>
+          {/* Tab switcher */}
+          <div className="mx-5 mb-4 flex rounded-xl bg-white p-1 shadow-sm">
+            {[["Accounts","🗂️"],["Transactions","📋"]].map(([t,ic])=>(
+              <button key={t} onClick={()=>setTab(t)} className={cx("flex flex-1 items-center justify-center gap-1.5 rounded-lg py-2.5 text-sm font-semibold transition",tab===t?"bg-[#f2f2f7] text-slate-900 shadow-sm":"text-slate-400")}>
+                <span>{ic}</span>{t}
+              </button>
+            ))}
+          </div>
+          {/* Content */}
+          <div className="flex-1 overflow-y-auto px-5" style={{paddingBottom:"calc(env(safe-area-inset-bottom,20px)+16px)"}}>
+            {tab==="Accounts"&&(
+              <>
+                <p className="mb-3 text-[11px] font-bold uppercase tracking-widest text-slate-400">Included in Projections</p>
+                {allAccounts.map((a,i)=>(
+                  <div key={i} className="mb-3 flex items-center justify-between rounded-2xl border-2 border-blue-400 bg-white px-4 py-4">
+                    <div className="flex items-center gap-3">
+                      <div className="grid h-6 w-6 place-items-center rounded-md bg-blue-500 text-white text-xs font-bold">✓</div>
+                      <div>
+                        <div className="font-semibold text-slate-900">{a.name}</div>
+                        {a.bankName&&<div className="text-xs text-slate-400">{a.bankName}</div>}
+                      </div>
+                    </div>
+                    <span className="text-lg font-extrabold text-blue-500">{money(a.balance)}</span>
+                  </div>
+                ))}
+              </>
+            )}
+            {tab==="Transactions"&&(
+              <>
+                <p className="mb-3 text-[11px] font-bold uppercase tracking-widest text-slate-400">All Transactions ({transactions.length})</p>
+                {transactions.length===0&&<div className="flex flex-col items-center py-16 text-slate-400"><div className="text-5xl mb-3">📭</div><p className="font-semibold">No transactions yet</p></div>}
+                {transactions.map((tx,i)=>(
+                  <div key={tx.id||i} className="mb-2 flex items-center justify-between rounded-2xl bg-white px-4 py-3">
+                    <span className="flex items-center gap-3">
+                      <span className="grid h-10 w-10 place-items-center rounded-xl bg-[#f2f2f7] text-xl">{tx.emoji}</span>
+                      <div><div className="font-semibold text-slate-900 text-sm">{tx.label}</div><div className="text-xs text-slate-400">{tx.date}</div></div>
+                    </span>
+                    <span className={cx("font-bold",tx.type==="income"?"text-emerald-500":"text-rose-500")}>{tx.type==="income"?"+":"-"}{money(tx.amt)}</span>
+                  </div>
+                ))}
+              </>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    // ── Bank Link Flow ────────────────────────────────────
+    function BankLinkFlow({onClose,onConnect}){
+      const [step,setStep]=useState("search");
+      const [query,setQuery]=useState("");
+      const [bank,setBank]=useState(null);
+      const [user,setUser]=useState("");
+      const [pass,setPass]=useState("");
+      const [progress,setProgress]=useState(0);
+      const [syncMsg,setSyncMsg]=useState("Connecting…");
+      const [syncedData,setSyncedData]=useState(null);
+
+      const filtered=BANKS.filter(b=>b.name.toLowerCase().includes(query.toLowerCase())||b.sub.toLowerCase().includes(query.toLowerCase()));
+
+      const startSync=()=>{
+        setStep("syncing");
+        const msgs=["Establishing secure connection…","Verifying credentials…","Fetching accounts…","Retrieving transactions…","Analyzing spending patterns…","Detecting recurring income…","Calculating projections…","Almost done…"];
+        let p=0,i=0;
+        const iv=setInterval(()=>{
+          p+=Math.random()*14+4;
+          if(i<msgs.length-1&&p>(i+1)*12){setSyncMsg(msgs[++i]);}
+          if(p>=100){clearInterval(iv);setProgress(100);setSyncMsg("Sync complete ✓");const d=generateBankData(bank);setSyncedData(d);setStep("success");}
+          else setProgress(Math.min(p,99));
+        },400);
+      };
+
+      if(step==="search") return(
+        <div className="absolute inset-0 z-50 bg-white flex flex-col" style={{paddingTop:"calc(env(safe-area-inset-top,0px)+8px)"}}>
+          <div className="flex items-center gap-3 px-5 pb-4">
+            <button onClick={onClose} className="grid h-10 w-10 place-items-center rounded-full bg-slate-100 text-slate-500 text-xl">✕</button>
+            <h1 className="text-xl font-extrabold text-slate-900">Link a Bank</h1>
+          </div>
+          <div className="px-5 pb-3">
+            <div className="flex items-center gap-3 rounded-2xl bg-slate-100 px-4 py-3">
+              <span className="text-slate-400">🔍</span>
+              <input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search banks…" className="flex-1 bg-transparent text-slate-900 outline-none placeholder:text-slate-400"/>
+            </div>
+          </div>
+          <div className="flex-1 overflow-y-auto px-5 space-y-2 pb-8">
+            {!query&&<p className="text-xs font-bold uppercase tracking-wider text-slate-400 pb-1">All Banks</p>}
+            {filtered.map(b=>(
+              <button key={b.id} onClick={()=>{setBank(b);setStep("credentials");}} className="flex w-full items-center gap-4 rounded-2xl bg-slate-50 px-4 py-4 text-left transition active:scale-[0.98]">
+                <div className="grid h-12 w-12 place-items-center rounded-2xl text-2xl font-bold text-white flex-shrink-0" style={{background:b.color}}>{b.icon}</div>
+                <div className="flex-1 min-w-0"><div className="font-bold text-slate-900 truncate">{b.name}</div><div className="text-xs text-slate-400 truncate">{b.sub}</div></div>
+                <span className="text-slate-300 text-lg">›</span>
+              </button>
+            ))}
+            {filtered.length===0&&<div className="py-12 text-center text-slate-400"><div className="text-4xl mb-3">🏦</div><p className="font-semibold">No banks found</p><p className="text-sm mt-1">Try a different search</p></div>}
+          </div>
+          <div className="px-5 py-4 border-t" style={{paddingBottom:"calc(env(safe-area-inset-bottom,20px)+8px)"}}>
+            <p className="text-center text-xs text-slate-400">🔒 Bank-grade 256-bit encryption · Read-only access</p>
+          </div>
+        </div>
+      );
+
+      if(step==="credentials") return(
+        <div className="absolute inset-0 z-50 bg-white flex flex-col" style={{paddingTop:"calc(env(safe-area-inset-top,0px)+8px)"}}>
+          <div className="flex items-center gap-3 px-5 pb-6">
+            <button onClick={()=>setStep("search")} className="grid h-10 w-10 place-items-center rounded-full bg-slate-100 text-slate-500 text-xl">‹</button>
+            <h1 className="text-xl font-extrabold text-slate-900">Sign In</h1>
+          </div>
+          <div className="flex-1 px-5">
+            <div className="flex flex-col items-center mb-8">
+              <div className="grid h-20 w-20 place-items-center rounded-3xl text-4xl text-white shadow-lg mb-3" style={{background:bank.color}}>{bank.icon}</div>
+              <h2 className="text-2xl font-extrabold text-slate-900">{bank.name}</h2>
+              <p className="text-slate-500 text-sm mt-1">{bank.sub}</p>
+            </div>
+            <div className="space-y-4">
+              <div>
+                <label className="text-xs font-bold uppercase tracking-wider text-slate-400">Online Username / ID</label>
+                <input value={user} onChange={e=>setUser(e.target.value)} placeholder="Enter your username" className="mt-2 w-full rounded-2xl border border-slate-200 px-4 py-4 text-slate-900 outline-none focus:border-blue-400 text-lg"/>
+              </div>
+              <div>
+                <label className="text-xs font-bold uppercase tracking-wider text-slate-400">Password</label>
+                <input type="password" value={pass} onChange={e=>setPass(e.target.value)} placeholder="Enter your password" className="mt-2 w-full rounded-2xl border border-slate-200 px-4 py-4 text-slate-900 outline-none focus:border-blue-400 text-lg"/>
+              </div>
+              <div className="rounded-2xl bg-emerald-50 border border-emerald-100 p-4">
+                <p className="text-xs text-emerald-700 font-semibold">🔒 Your credentials are encrypted and never stored. CashCycle uses read-only access — we cannot move money.</p>
+              </div>
+            </div>
+          </div>
+          <div className="px-5 py-4 flex gap-3" style={{paddingBottom:"calc(env(safe-area-inset-bottom,20px)+8px)"}}>
+            <FlowBack onClick={()=>setStep("search")}/>
+            <FlowNext onClick={startSync} label={user&&pass?"Connect Securely 🔒":"Connect Securely 🔒"}/>
+          </div>
+        </div>
+      );
+
+      if(step==="syncing") return(
+        <div className="absolute inset-0 z-50 bg-white flex flex-col items-center justify-center px-8 text-center">
+          <div className="grid h-24 w-24 place-items-center rounded-3xl text-5xl text-white shadow-xl mb-8" style={{background:bank.color}}>{bank.icon}</div>
+          <h2 className="text-2xl font-extrabold text-slate-900 mb-2">Syncing {bank.name}</h2>
+          <p className="text-slate-500 mb-8 text-sm">{syncMsg}</p>
+          <div className="w-full rounded-full bg-slate-100 h-3 overflow-hidden mb-3">
+            <div className="h-full rounded-full bg-blue-500 transition-all duration-500" style={{width:`${progress}%`}}/>
+          </div>
+          <p className="text-blue-500 font-bold">{Math.round(progress)}%</p>
+          <div className="mt-8 space-y-2 text-left w-full">
+            {["Accounts","Transactions","Bills & Subscriptions","Paycheck Schedule"].map((item,i)=>(
+              <div key={item} className={cx("flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-semibold transition",progress>(i+1)*22?"bg-emerald-50 text-emerald-700":"bg-slate-50 text-slate-400")}>
+                <span>{progress>(i+1)*22?"✓":"⏳"}</span>{item}
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+
+      if(step==="success"&&syncedData) return(
+        <div className="absolute inset-0 z-50 bg-white flex flex-col" style={{paddingTop:"calc(env(safe-area-inset-top,0px)+8px)"}}>
+          <div className="px-5 pb-4">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="grid h-14 w-14 place-items-center rounded-2xl text-3xl text-white" style={{background:bank.color}}>{bank.icon}</div>
+              <div><h2 className="text-xl font-extrabold text-slate-900">{bank.name} Connected!</h2><p className="text-emerald-600 font-semibold text-sm">✓ Synced successfully</p></div>
+            </div>
+            <div className="grid grid-cols-2 gap-3 mb-4">
+              {[["Total Balance",money(syncedData.accounts.reduce((s,a)=>s+a.balance,0))],["This Month Income",money(syncedData.stats.income)],["This Month Spent",money(syncedData.stats.expenses)],["Next Paycheck",syncedData.stats.nextPaycheck]].map(([l,v])=>(
+                <div key={l} className="rounded-2xl bg-slate-50 p-3"><div className="text-[10px] font-bold uppercase text-slate-400">{l}</div><div className="mt-1 font-extrabold text-slate-900 text-sm">{v}</div></div>
+              ))}
+            </div>
+            <h3 className="font-extrabold text-slate-900 mb-2">Accounts Found</h3>
+            <div className="space-y-2 mb-4">
+              {syncedData.accounts.map(a=>(
+                <div key={a.number} className="flex items-center justify-between rounded-2xl border border-slate-100 bg-slate-50 p-4">
+                  <div className="flex items-center gap-3"><span className="text-xl">{a.type==="checking"?"🏦":"💰"}</span><div><div className="font-bold text-slate-900">{a.name}</div><div className="text-xs text-slate-400">{a.number}</div></div></div>
+                  <span className="font-extrabold text-blue-500">{money(a.balance)}</span>
+                </div>
+              ))}
+            </div>
+            <h3 className="font-extrabold text-slate-900 mb-2">Recent Transactions ({syncedData.transactions.length})</h3>
+            <div className="space-y-1 max-h-40 overflow-y-auto">
+              {syncedData.transactions.slice(0,5).map(tx=>(
+                <div key={tx.id} className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2">
+                  <span className="flex items-center gap-2 text-sm font-semibold text-slate-700"><span>{tx.emoji}</span>{tx.label}</span>
+                  <span className={cx("text-sm font-bold",tx.type==="income"?"text-emerald-500":"text-rose-500")}>{tx.type==="income"?"+":"-"}{money(tx.amt)}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="mt-auto px-5 py-4 flex gap-3" style={{paddingBottom:"calc(env(safe-area-inset-bottom,20px)+8px)"}}>
+            <FlowBack onClick={onClose} />
+            <FlowNext onClick={()=>onConnect(bank,syncedData)} label="Add to CashCycle ✓"/>
+          </div>
+        </div>
+      );
+
+      return null;
+    }
+
+    // ── Profile ───────────────────────────────────────────
+    function Profile({openMenu,openAdd,connectedBanks=[],onBankConnect,userName="",setUserName,userEmail="",setUserEmail}){
+      const [editing,setEditing]=useState(false);
+      const [linking,setLinking]=useState(false);
+      const [tmpName,setTmpName]=useState(userName);
+      const [tmpEmail,setTmpEmail]=useState(userEmail);
+      const name=userName||"You";
+      const email=userEmail;
+      const initials=(userName||"?").split(" ").map(w=>w[0]).join("").toUpperCase().slice(0,2);
+      const totalBalance=connectedBanks.reduce((s,cb)=>s+cb.data.accounts.reduce((a,acc)=>a+acc.balance,0),7500);
+      return(<div className="flex h-full flex-col">
+        <div className="flex items-center justify-between px-5" style={{paddingTop:"calc(env(safe-area-inset-top,0px)+8px)"}}>
+          <button onClick={openMenu} className="grid h-11 w-11 place-items-center rounded-full bg-slate-100 text-xl">≡</button>
+          <h1 className="text-xl font-extrabold text-slate-900">Profile</h1>
+          <button onClick={()=>{setTmpName(name);setTmpEmail(email);setEditing(true);}} className="grid h-11 w-11 place-items-center rounded-full bg-slate-100 text-sm font-bold text-blue-500">Edit</button>
+        </div>
+        <div className="flex-1 overflow-y-auto px-5" style={{paddingBottom:"calc(env(safe-area-inset-bottom,0px) + 88px)"}}>
+          <div className="mt-6 flex flex-col items-center">
+            <div className="grid h-24 w-24 place-items-center rounded-full bg-blue-500 text-4xl font-extrabold text-white shadow-lg">{initials}</div>
+            <h2 className="mt-4 text-2xl font-extrabold text-slate-900">{name}</h2>
+            <p className="text-slate-500">{email}</p>
+          </div>
+          <div className="mt-6 grid grid-cols-3 gap-3">
+            {[[money(totalBalance),"Net Worth"],[String(2+connectedBanks.reduce((s,cb)=>s+cb.data.accounts.length,0)),"Accounts"],["2","Goals"]].map(([v,l])=>(<div key={l} className="rounded-2xl bg-slate-50 p-4 text-center"><div className="text-xl font-extrabold text-slate-900 leading-tight">{v}</div><div className="text-xs font-semibold text-slate-400 mt-1">{l}</div></div>))}
+          </div>
+          <h2 className="mt-6 text-xl font-extrabold text-slate-900">Accounts</h2>
+          <div className="mt-3 space-y-3">
+            {[["🏦","Checking","$2,500.00"],["💰","Savings","$5,000.00"]].map(([ic,n,v])=>(<div key={n} className="flex items-center justify-between rounded-2xl bg-slate-50 p-4"><span className="flex items-center gap-3 font-bold text-slate-900"><span className="text-xl">{ic}</span>{n}</span><span className="font-extrabold text-blue-500">{v}</span></div>))}
+          </div>
+          <h2 className="mt-6 text-xl font-extrabold text-slate-900">Connected Banks</h2>
+          {connectedBanks.length>0&&(
+            <div className="mt-3 space-y-2">
+              {connectedBanks.map(cb=>(
+                <div key={cb.bank.id}>
+                  <div className="flex items-center justify-between rounded-t-2xl px-4 py-3" style={{background:cb.bank.color}}>
+                    <span className="flex items-center gap-3 font-bold text-white"><span className="text-xl">{cb.bank.icon}</span>{cb.bank.name}</span>
+                    <span className="text-xs font-semibold text-white/80">✓ Synced</span>
+                  </div>
+                  {cb.data.accounts.map(a=>(
+                    <div key={a.number} className="flex items-center justify-between border-b border-slate-100 bg-slate-50 px-4 py-3 last:rounded-b-2xl">
+                      <span className="flex items-center gap-2 text-sm font-semibold text-slate-700"><span>{a.type==="checking"?"🏦":"💰"}</span>{a.name}<span className="text-slate-400 font-normal">{a.number}</span></span>
+                      <span className="font-extrabold text-blue-500">{money(a.balance)}</span>
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </div>
+          )}
+          <div className="mt-3 rounded-2xl border-2 border-dashed border-slate-200 p-5 text-center text-slate-400">
+            <div className="text-3xl mb-2">🏛️</div>
+            <p className="font-semibold">{connectedBanks.length>0?"Link another bank":"Connect a bank"}</p>
+            <p className="text-sm mt-1">Sync balances &amp; transactions automatically</p>
+            <button onClick={()=>setLinking(true)} className="mt-3 rounded-full bg-blue-500 px-6 py-2 text-sm font-bold text-white active:scale-95 transition">+ Connect</button>
+          </div>
+        </div>
+        {editing&&(<Sheet2 title="Edit Profile" onClose={()=>setEditing(false)} footer={<><FlowBack onClick={()=>setEditing(false)}/><FlowNext onClick={()=>{setUserName?.(tmpName);setUserEmail?.(tmpEmail);setEditing(false);}} label="Save"/></>}>
+          <div className="space-y-4">
+            <div><label className="text-xs font-bold uppercase tracking-wider text-slate-400">Name</label><input value={tmpName} onChange={e=>setTmpName(e.target.value)} className="mt-1 w-full rounded-2xl border border-slate-200 px-4 py-3 text-slate-900 outline-none focus:border-blue-400"/></div>
+            <div><label className="text-xs font-bold uppercase tracking-wider text-slate-400">Email</label><input value={tmpEmail} onChange={e=>setTmpEmail(e.target.value)} className="mt-1 w-full rounded-2xl border border-slate-200 px-4 py-3 text-slate-900 outline-none focus:border-blue-400"/></div>
+          </div>
+        </Sheet2>)}
+        {linking&&<BankLinkFlow onClose={()=>setLinking(false)} onConnect={(bank,data)=>{onBankConnect?.(bank,data);setLinking(false);}}/>}
+      </div>);
+    }
+
+    // ── Updates overlay ───────────────────────────────────
+    function UpdatesSheet({onClose}){
+      const items=[["🎉","v1.3 — Smart Forecasting","Balance predictions now account for recurring bills automatically."],["📊","v1.2 — Insights upgrade","New Net Worth chart and 6-month projection view."],["🏆","v1.1 — Weather Warnings","Set custom balance thresholds with visual alerts."],["📅","v1.0 — Launch","CashCycle is live! Calendar, Budget, Debt & Goals tracking."]];
+      return(<div className="absolute inset-0 z-40 bg-white flex flex-col" style={{paddingTop:"calc(env(safe-area-inset-top,0px)+8px)"}}>
+        <div className="flex items-center justify-between px-5 pb-4 border-b">
+          <h1 className="text-2xl font-extrabold text-slate-900">What's New</h1>
+          <button onClick={onClose} className="grid h-10 w-10 place-items-center rounded-full bg-slate-100 text-slate-500 text-xl">✕</button>
+        </div>
+        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
+          {items.map(([ic,title,desc])=>(<div key={title} className="rounded-2xl bg-slate-50 p-4"><div className="flex items-center gap-3 mb-2"><span className="text-2xl">{ic}</span><div className="font-extrabold text-slate-900">{title}</div></div><p className="text-sm text-slate-500 leading-relaxed">{desc}</p></div>))}
+        </div>
+        <div className="px-5 py-4" style={{paddingBottom:"calc(env(safe-area-inset-bottom,20px)+8px)"}}>
+          <button onClick={onClose} className="w-full rounded-full bg-blue-500 py-4 font-bold text-white">Got it</button>
+        </div>
+      </div>);
+    }
+
+    // ── Shared layout helpers (must be top-level — never define inside another component) ──
+    function OnboardingCard({icon,title,sub,children,footer}){return(<div className="flex flex-1 flex-col px-6 pt-6">
+      {icon&&<div className="mx-auto mb-3 grid h-16 w-16 place-items-center rounded-full bg-slate-100 text-3xl">{icon}</div>}
+      <h1 className="text-center text-3xl font-extrabold tracking-tight">{title}</h1>
+      {sub&&<p className="mt-2 text-center text-slate-500">{sub}</p>}
+      <div className="mt-6 flex-1 overflow-y-auto">{children}</div>
+      <div className="sticky bottom-0 flex items-center justify-center gap-3 bg-white/80 pt-4 backdrop-blur" style={{paddingBottom:"calc(env(safe-area-inset-bottom,20px) + 8px)"}}>{footer}</div>
+    </div>);}
+    function SetupSheet({title,sub,children,footer}){return(<div className="absolute inset-0 flex flex-col justify-end bg-black/30"><div className="flex max-h-[88%] flex-col rounded-t-[36px] bg-white px-6 pt-7" style={{paddingBottom:"calc(env(safe-area-inset-bottom,20px) + 8px)"}}><h1 className="text-3xl font-extrabold">{title}</h1>{sub&&<p className="mt-1 text-slate-500">{sub}</p>}<div className="mt-5 flex-1 overflow-y-auto">{children}</div><div className="mt-4 flex gap-3">{footer}</div></div></div>);}
+    function SetupNx(p){return<button {...p} className="flex-1 rounded-2xl bg-blue-500 py-4 text-center font-bold text-white">Next →</button>;}
+    function SetupBk({onClick}){return<button onClick={onClick} className="rounded-2xl bg-slate-100 px-6 py-4 font-bold text-slate-600">‹ Back</button>;}
+    function SwipeClose({onClose,children,className}){
+      const ref=useRef(null);
+      useEffect(()=>{
+        const el=ref.current;if(!el)return;
+        let sx=0,sy=0;
+        const ts=e=>{sx=e.touches[0].clientX;sy=e.touches[0].clientY;};
+        const te=e=>{const dx=e.changedTouches[0].clientX-sx,dy=Math.abs(e.changedTouches[0].clientY-sy);if(dx>60&&dy<80)onClose?.();};
+        el.addEventListener("touchstart",ts,{passive:true});
+        el.addEventListener("touchend",te,{passive:true});
+        return()=>{el.removeEventListener("touchstart",ts);el.removeEventListener("touchend",te);};
+      },[onClose]);
+      return<div ref={ref} className={className}>{children}</div>;
+    }
+
+    // ── Onboarding ────────────────────────────────────────
+    function Onboarding({onDone}){
+      const [step,setStep]=useState(0);
+      const [lang,setLang]=useState("English");
+      const [name,setName]=useState("");
+      const next=()=>setStep(s=>s+1);
+      const steps=[
+        <OnboardingCard key="lang" icon="🌐" title="Choose your language" sub="You can change this later in Settings" footer={<PrimaryBtn onClick={next}>Next →</PrimaryBtn>}>
+          <div className="space-y-3">{LANGS.map(([n,en])=>(<button key={n} onClick={()=>setLang(n)} className={cx("flex w-full items-center justify-between rounded-2xl border px-5 py-4 text-left transition",lang===n?"border-slate-400 bg-slate-50":"border-slate-200")}><div><div className="font-bold">{n}</div><div className="text-sm text-slate-500">{en}</div></div><Check on={lang===n}/></button>))}</div>
+        </OnboardingCard>,
+        <OnboardingCard key="name" icon="👤" title="What's your first name?" sub="We'll use this to personalize your experience">
+          <input value={name} onChange={e=>setName(e.target.value)} placeholder="Enter your first name" className="w-full rounded-2xl border border-slate-200 px-5 py-4 text-lg outline-none focus:border-blue-400"/>
+          <button onClick={next} disabled={!name} className={cx("mt-4 w-full rounded-2xl py-4 font-bold text-white",name?"bg-blue-500":"bg-slate-200 text-slate-400")}>Continue</button>
+        </OnboardingCard>,
+        <OnboardingCard key="done" icon="🚀" title={`Welcome${name?", "+name:""}!`} sub="Next, let's set up your accounts." footer={<PrimaryBtn onClick={()=>onDone({name,lang})}>Get Started →</PrimaryBtn>}>
+          <div className="rounded-2xl bg-slate-50 p-6 text-center text-slate-500">Language: <b>{lang}</b></div>
+        </OnboardingCard>
+      ];
+      return(<div className="flex h-full flex-col" style={{paddingTop:"env(safe-area-inset-top,44px)"}}>
+        <div className="h-1.5 w-full bg-slate-100"><div className="h-full bg-blue-500 transition-all" style={{width:`${((step+1)/steps.length)*100}%`}}/></div>
+        {steps[step]}
+      </div>);
+    }
+
+    // ── AccountSetup ──────────────────────────────────────
+    const INCOME_ICONS=["🕐","💰","💼","🏢","📦","🎵","✂️","🖥️","🚗","🌱"];
+    function IncomeRow({inc,idx,onChange,onRemove}){
+      return(
+        <div className="rounded-2xl bg-slate-50 p-4 space-y-3">
+          <div className="flex items-center gap-2">
+            <span className="text-2xl">{inc.icon}</span>
+            <input
+              value={inc.label}
+              onChange={e=>onChange(idx,"label",e.target.value)}
+              placeholder="Income source name"
+              className="flex-1 rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-900 outline-none focus:border-blue-400"
+            />
+            <button onClick={()=>onRemove(idx)} className="grid h-8 w-8 place-items-center rounded-full bg-rose-100 text-rose-500 text-sm font-bold flex-shrink-0">✕</button>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="relative flex-1">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 font-bold text-slate-400">$</span>
+              <input
+                type="text" inputMode="decimal"
+                value={inc.amt}
+                onChange={e=>onChange(idx,"amt",e.target.value)}
+                placeholder="0.00"
+                className="w-full rounded-xl border border-slate-200 pl-7 pr-3 py-3 text-xl font-extrabold text-slate-900 outline-none focus:border-blue-400"
+              />
+            </div>
+            <select
+              value={inc.freq}
+              onChange={e=>onChange(idx,"freq",e.target.value)}
+              className="rounded-xl border border-slate-200 px-3 py-3 text-sm font-semibold text-slate-700 outline-none bg-white"
+            >
+              {["Weekly","Bi-Weekly","Monthly","Yearly"].map(f=><option key={f}>{f}</option>)}
+            </select>
+          </div>
+        </div>
+      );
+    }
+    function AccountSetup({onDone}){
+      const [step,setStep]=useState(0);
+      const [accts,setAccts]=useState([{icon:"🏦",name:"Checking",amt:2500,on:true},{icon:"💰",name:"Savings",amt:5000,on:true},{icon:"💵",name:"Cash",amt:200,on:false}]);
+      const [incomes,setIncomes]=useState([{icon:"🕐",label:"Hourly Job",amt:"1600",freq:"Bi-Weekly"}]);
+      const next=()=>setStep(s=>s+1);
+      const back=()=>setStep(s=>Math.max(0,s-1));
+      const toggle=i=>setAccts(p=>p.map((a,k)=>k===i?{...a,on:!a.on}:a));
+      const changeIncome=(i,field,val)=>setIncomes(p=>p.map((inc,k)=>k===i?{...inc,[field]:val}:inc));
+      const removeIncome=i=>setIncomes(p=>p.filter((_,k)=>k!==i));
+      const addIncome=()=>setIncomes(p=>[...p,{icon:INCOME_ICONS[p.length%INCOME_ICONS.length],label:"",amt:"",freq:"Monthly"}]);
+      const screens=[
+        <div key="w" className="absolute inset-0 flex flex-col justify-end bg-black/30"><div className="m-4 rounded-[36px] bg-white p-8 text-center"><div className="mx-auto mb-4 grid h-20 w-20 place-items-center rounded-full bg-slate-100 text-4xl">🚀</div><h1 className="text-3xl font-extrabold">Welcome to CashCycle</h1><p className="mt-2 text-slate-500">Set up your finances in just a few minutes.</p><button onClick={next} className="mt-6 w-full rounded-2xl bg-blue-500 py-4 font-bold text-white">Next →</button></div></div>,
+        <SetupSheet key="s" title="Select Your Accounts" sub="Choose the accounts you want to track" footer={<><SetupBk onClick={back}/><SetupNx onClick={next}/></>}><div className="flex flex-wrap gap-2">{accts.map((a,i)=>(<button key={a.name} onClick={()=>toggle(i)} className={cx("rounded-full px-5 py-3 font-semibold transition",a.on?"bg-blue-500 text-white":"bg-slate-100 text-slate-600")}>{a.icon} {a.name} {money(a.amt)}</button>))}</div></SetupSheet>,
+        <SetupSheet key="ri" title="Review Your Income" sub="Add or edit your income sources" footer={<><SetupBk onClick={back}/><button onClick={onDone} className="flex-1 rounded-2xl bg-blue-500 py-4 font-bold text-white">Finish →</button></>}>
+          <div className="space-y-3">
+            {incomes.map((inc,i)=><IncomeRow key={i} inc={inc} idx={i} onChange={changeIncome} onRemove={removeIncome}/>)}
+            <button onClick={addIncome} className="flex w-full items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-slate-200 py-4 text-sm font-semibold text-slate-400 active:bg-slate-50">+ Add Income Source</button>
+          </div>
+        </SetupSheet>
+      ];
+      return<div className="relative h-full" style={{paddingTop:"env(safe-area-inset-top,44px)"}}>{screens[step]}</div>;
+    }
+    // ── BudgetWizard / NetWorthFlow / AllSet ─────────────
+    function BudgetWizard({onDone,onBack}){
+      const [step,setStep]=useState(0);
+      const [cycle,setCycle]=useState("Weekly");
+      const [rows,setRows]=useState(WEEKLY_BUDGET_ROWS);
+      const setVal=(i,v)=>setRows(p=>p.map((r,k)=>k===i?{...r,val:Number(v)||0}:r));
+      if(step===0)return(<Sheet2 title="Budget Cycle" sub="Choose how you think about spending" onClose={onBack} footer={<><FlowBack onClick={onBack}/><FlowNext onClick={()=>setStep(1)}/></>}>
+        <div className="space-y-3">{BUDGET_CYCLES.map(([ic,t,s])=>(<button key={t} onClick={()=>setCycle(t)} className={cx("flex w-full items-center gap-4 rounded-2xl border-2 p-4 text-left transition",cycle===t?"border-blue-500 bg-blue-50":"border-transparent bg-slate-50")}><span className="text-2xl">{ic}</span><div className="flex-1"><div className="font-extrabold">{t}</div><div className="text-sm text-slate-500">{s}</div></div></button>))}</div>
+      </Sheet2>);
+      return(<Sheet2 title="Set Budgets" sub={`Projections for your ${cycle} cycle`} onClose={()=>setStep(0)} footer={<><FlowBack onClick={()=>setStep(0)}/><FlowNext onClick={onDone}/></>}>
+        <div className="space-y-3">{rows.map((r,i)=>(<div key={r.name} className={cx("rounded-2xl border-l-4 p-4",r.bar)}><div className="flex items-center gap-3"><span className="text-2xl">{r.icon}</span><div className="flex-1 font-bold text-slate-900">{r.name}</div><input type="text" inputMode="decimal" value={r.val} onChange={e=>setVal(i,e.target.value)} className="w-20 rounded-lg border p-1 text-right"/></div></div>))}</div>
+      </Sheet2>);
+    }
+    function NetWorthFlow({onDone,onBack}){
+      const [step,setStep]=useState(0);
+      const [assets,setAssets]=useState([]);
+      const [liabs,setLiabs]=useState([]);
+      const toggle=(set,val)=>set(p=>p.includes(val)?p.filter(x=>x!==val):[...p,val]);
+      return(<Sheet2 title={step===0?"Select Assets":"Select Liabilities"} sub="Track what you own and owe" onClose={step===0?onBack:()=>setStep(0)} footer={<><FlowBack onClick={step===0?onBack:()=>setStep(0)}/><FlowNext onClick={step===0?()=>setStep(1):onDone}/></>}>
+        <div className="flex flex-wrap gap-2">{(step===0?ASSETS:LIABILITIES).map(([ic,n])=>(<SelectPill key={n} icon={ic} label={n} active={(step===0?assets:liabs).includes(n)} onClick={()=>toggle(step===0?setAssets:setLiabs,n)}/>))}</div>
+      </Sheet2>);
+    }
+    function AllSet({onDone}){
+      return(<div className="absolute inset-0 z-30 flex flex-col justify-end bg-black/30">
+        <div className="rounded-t-[36px] bg-white px-6 pb-8 pt-7 text-center">
+          <span className="rounded-full bg-purple-100 px-4 py-1 text-sm font-semibold text-purple-600">🎉 Ready!</span>
+          <h1 className="mt-4 text-4xl font-extrabold leading-tight text-slate-900">You're all set!</h1>
+          <p className="mt-3 text-slate-500">We've unlocked full access for 30 days.</p>
+          <button onClick={onDone} className="mt-6 w-full rounded-full bg-blue-500 py-5 text-lg font-bold text-white shadow-lg">Get Started</button>
+        </div>
+      </div>);
+    }
+
+    // ── SplashScreen ─────────────────────────────────────
+    function SplashScreen({onDone,duration=1800}){
+      const [entered,setEntered]=useState(false);
+      const [leaving,setLeaving]=useState(false);
+      useEffect(()=>{
+        const t1=setTimeout(()=>setEntered(true),50);
+        const t2=setTimeout(()=>setLeaving(true),duration-400);
+        const t3=setTimeout(()=>onDone?.(),duration);
+        return()=>{clearTimeout(t1);clearTimeout(t2);clearTimeout(t3);};
+      },[]);
+      return(
+        <div className={cx("z-[9999] transition-opacity duration-500",leaving?"opacity-0 pointer-events-none":"opacity-100")} style={{position:"fixed",top:0,left:0,right:0,bottom:0,background:"#2ecc5f",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center"}}>
+          <span className={cx("text-8xl transition-all duration-700 ease-out",entered?"translate-y-0 opacity-100":"translate-y-8 opacity-0")}>☀️</span>
+          <span className={cx("mt-4 text-2xl font-extrabold text-white tracking-tight transition-all duration-700 delay-100",entered?"opacity-100":"opacity-0")}>CashCycle</span>
+        </div>
+      );
+    }
+
+    // ── WeatherWarnings ───────────────────────────────────
+    const TIERS = [
+      { key:"clear",  label:"Clear Skies",   emoji:"☀️",  prefix:"Above", value:500, accent:"#16a34a", accentLight:"#dcfce7", bg:"#f0fdf4", border:"#bbf7d0" },
+      { key:"partly", label:"Partly Cloudy", emoji:"⛅",  prefix:"Above", value:300, accent:"#0ea5e9", accentLight:"#e0f2fe", bg:"#f0f9ff", border:"#bae6fd" },
+      { key:"rain",   label:"Rain Expected", emoji:"🌧️", prefix:"Above", value:100, accent:"#ea580c", accentLight:"#ffedd5", bg:"#fff7ed", border:"#fed7aa" },
+      { key:"storm",  label:"Storm Warning", emoji:"⛈️", prefix:"At",    value:0,   accent:"#475569", accentLight:"#e2e8f0", bg:"#f8fafc", border:"#e2e8f0" },
+    ];
+    const WW_MIN = 0, WW_MAX = 800;
+    function ThresholdSlider({ tier, value, onChange }) {
+      const pct = ((value - WW_MIN) / (WW_MAX - WW_MIN)) * 100;
+      return (
+        <div className="rounded-2xl p-5 mb-4 border" style={{ backgroundColor: tier.bg, borderColor: tier.border }}>
+          <div className="flex items-start justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <span className="text-3xl">{tier.emoji}</span>
+              <div>
+                <div className="font-bold text-lg" style={{ color: tier.accent }}>{tier.label}</div>
+                <div className="text-sm" style={{ color: tier.accent, opacity: 0.8 }}>{tier.prefix} ${value}</div>
+              </div>
+            </div>
+            <div className="font-bold text-2xl" style={{ color: tier.accent }}>${value}</div>
+          </div>
+          <input type="range" min={WW_MIN} max={WW_MAX} step={10} value={value}
+            onChange={e => onChange(Number(e.target.value))}
+            className="w-full appearance-none cursor-pointer h-2.5 rounded-full"
+            style={{ background: `linear-gradient(to right, ${tier.accent} 0%, ${tier.accent} ${pct}%, ${tier.accentLight} ${pct}%, ${tier.accentLight} 100%)`, "--thumb": tier.accent }}
+          />
+        </div>
+      );
+    }
+    function WeatherWarnings({ onClose }) {
+      const [tiers, setTiers] = useState(TIERS);
+      const setValue = (key, value) => setTiers(prev => prev.map(t => t.key === key ? { ...t, value } : t));
+      return (
+        <div className="flex h-full flex-col overflow-y-auto px-5 pb-10 bg-white" style={{paddingTop:"calc(env(safe-area-inset-top,0px) + 16px)"}}>
+          <style>{`input[type="range"]::-webkit-slider-thumb{-webkit-appearance:none;width:56px;height:30px;border-radius:99px;background:var(--thumb);cursor:pointer;box-shadow:0 2px 6px rgba(0,0,0,0.2);}input[type="range"]::-moz-range-thumb{width:56px;height:30px;border:none;border-radius:99px;background:var(--thumb);cursor:pointer;}`}</style>
+          <div className="flex items-start justify-between mb-6">
+            <div><h1 className="text-2xl font-extrabold text-slate-900">Weather Warnings</h1><p className="text-slate-500 text-sm">Adjust balance thresholds</p></div>
+            <div className="flex items-center gap-2">
+              <button onClick={onClose} className="bg-blue-500 text-white font-bold rounded-full px-5 py-2">Save</button>
+              <button onClick={onClose} className="w-9 h-9 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 text-xl">✕</button>
+            </div>
+          </div>
+          <div className="h-9 rounded-full mb-2" style={{ background: "linear-gradient(to right, #475569, #ea580c, #0ea5e9, #16a34a)" }}/>
+          <div className="flex justify-between text-xs font-bold text-slate-400 mb-6"><span>$0</span><span>$800</span></div>
+          <h2 className="text-xl font-bold text-slate-900 mb-4">Balance Thresholds</h2>
+          {tiers.map(tier => <ThresholdSlider key={tier.key} tier={tier} value={tier.value} onChange={v => setValue(tier.key, v)}/>)}
+        </div>
+      );
+    }
+
+    const STORE_KEY="cashcycle_v1";
+    const DEFAULT_TXS=[
+      {id:1,type:"expense",emoji:"🛒",label:"Groceries",amt:75,date:"May 18",category:"Food"},
+      {id:2,type:"expense",emoji:"📺",label:"Netflix",amt:20,date:"May 19",category:"Entertainment"},
+      {id:3,type:"expense",emoji:"☕",label:"Coffee",amt:5,date:"May 20",category:"Food"},
+      {id:4,type:"income",emoji:"💰",label:"Paycheck",amt:1600,date:"May 20",category:"Income"},
+      {id:5,type:"expense",emoji:"🏠",label:"Rent",amt:1000,date:"May 22",category:"Bills"},
+    ];
+    function loadSaved(){try{return JSON.parse(localStorage.getItem(STORE_KEY)||"{}");}catch(e){return{};}}
+
+
+    function ForecastContainer(){
+      const [booted,setBooted]=useState(false);
+      const [toast,setToast]=useState(null);
+      const showToast=msg=>{setToast(msg);setTimeout(()=>setToast(null),2500);};
+      const sv=useMemo(loadSaved,[]);
+      const [phase,setPhase]=useState(sv.phase||"onboarding");
+      const [tab,setTab]=useState(sv.tab||"home");
+      const [menuOpen,setMenuOpen]=useState(false);
+      const [overlay,setOverlay]=useState(null);
+      const [dark,setDark]=useState(sv.dark||false);
+      const [accent,setAccent]=useState(sv.accent||"#3b82f6");
+      const [userName,setUserName]=useState(sv.userName||"");
+      const [userEmail,setUserEmail]=useState(sv.userEmail||"");
+      const [userLang,setUserLang]=useState(sv.userLang||"English");
+      const [connectedBanks,setConnectedBanks]=useState(sv.connectedBanks||[]);
+      const [transactions,setTransactions]=useState(sv.transactions||DEFAULT_TXS);
+      const [goals,setGoals]=useState(sv.goals||GOALS);
+      const [dockVisible,setDockVisible]=useState(true);
+      const [addMenuOpen,setAddMenuOpen]=useState(false);
+
+      // Persist all state to localStorage on every change
+      useEffect(()=>{
+        try{
+          localStorage.setItem(STORE_KEY,JSON.stringify({phase,tab,dark,accent,userName,userEmail,userLang,connectedBanks,transactions,goals}));
+        }catch(e){}
+      },[phase,tab,dark,accent,userName,userEmail,userLang,connectedBanks,transactions,goals]);
+
+      const addTransaction=tx=>setTransactions(p=>[tx,...p]);
+      const onBankConnect=(bank,data)=>{
+        setConnectedBanks(p=>[...p,{bank,data}]);
+        setTransactions(p=>[...data.transactions.map(tx=>({...tx,id:Date.now()+Math.random()})),...p]);
+      };
+
+      // ── Derived computed state ──────────────────────────
+      const MONTH_NAMES=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+      const nowRef=new Date();
+      const curMonth=MONTH_NAMES[nowRef.getMonth()];
+
+      const calendarEvents=useMemo(()=>{
+        const map={};
+        transactions.forEach(tx=>{
+          let day=null;
+          if(tx.date==="Today") day=nowRef.getDate();
+          else{ const [mon,d]=tx.date.split(" "); if(mon===curMonth&&d) day=parseInt(d); }
+          if(!day||isNaN(day))return;
+          if(!map[day])map[day]=[];
+          map[day].push({emoji:tx.emoji,label:tx.label,amt:tx.type==="income"?tx.amt:-tx.amt,color:tx.type==="income"?"bg-emerald-100 border-emerald-400":tx.category==="Bills"?"bg-rose-100 border-rose-400":tx.category==="Food"?"bg-amber-100 border-amber-400":tx.category==="Entertainment"?"bg-purple-100 border-purple-400":tx.category==="Transport"||tx.category==="Transportation"?"bg-sky-100 border-sky-400":"bg-slate-100 border-slate-400"});
+        });
+        return map;
+      },[transactions]);
+
+      const CAT_DEF=[
+        {icon:"🍔",name:"Food",planned:232,bar:"bg-amber-400",text:"text-amber-500"},
+        {icon:"🚗",name:"Transportation",planned:173,bar:"bg-sky-400",text:"text-sky-500"},
+        {icon:"🎬",name:"Entertainment",planned:80,bar:"bg-purple-500",text:"text-purple-600"},
+        {icon:"🧾",name:"Bills",planned:300,bar:"bg-rose-400",text:"text-rose-500"},
+        {icon:"💊",name:"Health",planned:100,bar:"bg-emerald-400",text:"text-emerald-600"},
+      ];
+      const liveCategories=useMemo(()=>{
+        const spending={};
+        transactions.forEach(tx=>{
+          if(tx.type!=="expense")return;
+          const cat=tx.category==="Transport"?"Transportation":tx.category;
+          if(cat&&cat!=="Expense"&&cat!=="Income") spending[cat]=(spending[cat]||0)+tx.amt;
+        });
+        return CAT_DEF.map(c=>{
+          const used=Math.round((spending[c.name]||0)*100)/100;
+          const pct=c.planned>0?Math.min(Math.round((used/c.planned)*100),999):0;
+          return{...c,used,pct};
+        }).filter(c=>c.used>0||["Food","Transportation","Entertainment"].includes(c.name));
+      },[transactions]);
+
+      const totalBalance=useMemo(()=>{
+        const bankBal=connectedBanks.reduce((s,cb)=>s+cb.data.accounts.reduce((a,acc)=>a+acc.balance,0),0);
+        return 7500+bankBal;
+      },[connectedBanks]);
+      const balanceDisplay=totalBalance>=1000?`$${(totalBalance/1000).toFixed(1)}k`:money(totalBalance);
+
+      const go=dest=>{setMenuOpen(false);setDockVisible(true);setTab(dest);};
+      const resetApp=()=>{
+        try{localStorage.removeItem(STORE_KEY);}catch(e){}
+        setPhase("onboarding");setTab("home");setOverlay(null);
+        setConnectedBanks([]);setTransactions(DEFAULT_TXS);
+        setUserName("");setUserEmail("");setUserLang("English");
+        setDark(false);setAccent("#3b82f6");
+      };
+      const cp={
+        openMenu:()=>setMenuOpen(true),
+        openCash:()=>setOverlay("cash"),
+        openInsights:()=>setOverlay("insights"),
+        openWeather:()=>setOverlay("weather"),
+        openAdd:()=>setOverlay("add"),
+        transactions,addTransaction,
+        today:balanceDisplay,balanceDisplay,calendarEvents,liveCategories,userName,
+      };
+      return(<div className={cx("relative overflow-hidden transition-colors font-sans",dark?"bg-slate-900 text-slate-100":"bg-white")} style={{position:"fixed",top:0,left:0,right:0,bottom:0}}>
+          {!booted?<SplashScreen onDone={()=>setBooted(true)}/>:(
+            <>
+              {phase==="onboarding"&&<Onboarding onDone={({name,lang})=>{setUserName(name);setUserLang(lang);setPhase("setup");}}/>}
+              {phase==="setup"&&<AccountSetup onDone={()=>setPhase("budgetWizard")}/>}
+              {phase==="budgetWizard"&&<BudgetWizard onBack={()=>setPhase("setup")} onDone={()=>setPhase("netWorth")}/>}
+              {phase==="netWorth"&&<NetWorthFlow onBack={()=>setPhase("budgetWizard")} onDone={()=>setPhase("allSet")}/>}
+              {phase==="allSet"&&<AllSet onDone={()=>setPhase("app")}/>}
+              {phase==="app"&&(
+                <TabCtx.Provider value={{tab,setTab}}>
+                  {tab==="home"&&<CalendarLive {...cp} onDayTap={()=>{setAddMenuOpen(false);setOverlay("add");}} onScrollDir={dir=>{if(dir==="up")setDockVisible(false);else setDockVisible(true);}}/>}
+                  {tab==="history"&&<History {...cp}/>}
+                  {tab==="budget"&&<Budget {...cp}/>}
+                  {tab==="debt"&&<Debt {...cp}/>}
+                  {tab==="goals"&&<Goals {...cp} goals={goals} setGoals={setGoals}/>}
+                  {tab==="profile"&&<Profile openMenu={cp.openMenu} openAdd={cp.openAdd} connectedBanks={connectedBanks} onBankConnect={onBankConnect} userName={userName} setUserName={setUserName} userEmail={userEmail} setUserEmail={setUserEmail}/>}
+                  {tab==="settings"&&<Settings openMenu={cp.openMenu} dark={dark} setDark={setDark} accent={accent} setAccent={setAccent} resetApp={resetApp} userLang={userLang} setUserLang={setUserLang}/>}
+                  {overlay==="insights"&&<SwipeClose onClose={()=>setOverlay(null)} className="absolute inset-0 z-30 bg-white"><Insights onClose={()=>setOverlay(null)}/></SwipeClose>}
+                  {overlay==="cash"&&<SwipeClose onClose={()=>setOverlay(null)} className="absolute inset-0 z-30 bg-white"><CashBalance onClose={()=>setOverlay(null)} connectedBanks={connectedBanks} totalBalance={totalBalance} transactions={transactions}/></SwipeClose>}
+                  {overlay==="weather"&&<SwipeClose onClose={()=>setOverlay(null)} className="absolute inset-0 z-30 bg-white"><WeatherWarnings onClose={()=>setOverlay(null)}/></SwipeClose>}
+                  {(overlay==="add"||overlay==="expense"||overlay==="income")&&<SwipeClose onClose={()=>setOverlay(null)} className="absolute inset-0 z-30"><AddTransaction initialType={overlay==="income"?"income":"expense"} onClose={()=>setOverlay(null)} onAdd={addTransaction}/></SwipeClose>}
+                  {overlay==="goal_quick"&&<SwipeClose onClose={()=>setOverlay(null)} className="absolute inset-0 z-30"><AddGoalSheet onSave={g=>{setGoals(p=>[...p,g]);setOverlay(null);}} onClose={()=>setOverlay(null)}/></SwipeClose>}
+                  {addMenuOpen&&<QuickAddMenu onClose={()=>setAddMenuOpen(false)} onExpense={()=>{setAddMenuOpen(false);setOverlay("expense");}} onIncome={()=>{setAddMenuOpen(false);setOverlay("income");}} onGoal={()=>{setAddMenuOpen(false);setOverlay("goal_quick");}}/>}
+                  {overlay==="updates"&&<SwipeClose onClose={()=>setOverlay(null)} className="absolute inset-0 z-40"><UpdatesSheet onClose={()=>setOverlay(null)}/></SwipeClose>}
+                  <SideMenu open={menuOpen} onClose={()=>setMenuOpen(false)} go={go} dark={dark} setDark={setDark} onCheckUpdate={()=>showToast("You're on the latest version ✓")}/>
+                  <DockNav active={tab} onSelect={dest=>{if(tab!=="home")setDockVisible(true);setAddMenuOpen(false);dest==="insights"?setOverlay("insights"):setTab(dest);}} onAdd={()=>setAddMenuOpen(p=>!p)} addOpen={addMenuOpen} visible={tab!=="home"||dockVisible}/>
+                  {toast&&<div className="absolute bottom-28 left-1/2 z-50 -translate-x-1/2 whitespace-nowrap rounded-full bg-slate-900 px-5 py-3 text-sm font-semibold text-white shadow-xl">{toast}</div>}
+                </TabCtx.Provider>
+              )}
+            </>
+          )}
+      </div>);
+    }
+    ReactDOM.createRoot(document.getElementById("root")).render(<ForecastContainer/>);
+  </script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js');
+    }
+  </script>
+</body>
+</html>
