@@ -468,7 +468,7 @@
         </div>
 
         {/* CALENDAR SCROLL AREA */}
-        <div ref={scrollRef} style={{flex:1,overflowY:"auto",WebkitOverflowScrolling:"touch",paddingBottom:"calc(env(safe-area-inset-bottom,8px) + 76px)"}} onScroll={handleScroll}>
+        <div ref={scrollRef} style={{flex:1,overflowY:"auto",WebkitOverflowScrolling:"touch",paddingBottom:"8px"}} onScroll={handleScroll}>
           {months.map(({year,month},mi)=>{
             const isCur=year===now.getFullYear()&&month===now.getMonth();
             const fd=(new Date(year,month,1).getDay()+6)%7; // blanks before day 1
@@ -1547,7 +1547,7 @@
   </script>
   <script>
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/sw.js?v=32');
+      navigator.serviceWorker.register('/sw.js?v=33');
     }
   </script>
 </body>
