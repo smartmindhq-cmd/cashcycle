@@ -378,7 +378,7 @@
       const now=new Date();
       const scrollRef=useRef(null);
       const lastTop=useRef(0);
-      const CELL_H=88;
+      const CELL_H=115;
 
       // Running balance: accumulate future events across all months from today's balance
       const runBal=useMemo(()=>{
@@ -438,8 +438,10 @@
         return["Budget start","Set budget",null];
       };
 
-      const BD="1px solid #f0f0f0";
-      const CS={borderBottom:BD,borderRight:BD,minHeight:`${CELL_H}px`,padding:"4px 3px 2px",textAlign:"left",background:"#fff",display:"block",width:"100%",overflow:"hidden",boxSizing:"border-box"};
+      const BD="1px solid #f8fafc";
+      const CS={borderBottom:BD,borderRight:BD,minHeight:`${CELL_H}px`,padding:"6px",textAlign:"left",background:"#fff",display:"block",width:"100%",overflow:"hidden",boxSizing:"border-box",verticalAlign:"top"};
+
+      const curLabel=new Date(now.getFullYear(),now.getMonth(),1).toLocaleString("default",{month:"long",year:"numeric"});
 
       return(
       <div style={{position:"absolute",inset:0,display:"flex",flexDirection:"column",background:"#fff"}}>
@@ -461,10 +463,10 @@
         </div>
 
         {/* CLEAR SKIES BANNER */}
-        <div style={{margin:"0 10px 6px",background:"#f0fdf4",borderRadius:"14px",borderLeft:"4px solid #22c55e",padding:"7px 10px 7px 10px",display:"flex",gap:"8px",alignItems:"flex-start"}}>
+        <div style={{margin:"0 10px 4px",background:"#f0fdf4",borderRadius:"14px",borderLeft:"4px solid #22c55e",padding:"7px 10px",display:"flex",gap:"8px",alignItems:"flex-start"}}>
           <span style={{fontSize:"20px",lineHeight:"1"}}>☀️</span>
           <div style={{flex:1,minWidth:0}}>
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"3px"}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"2px"}}>
               <span style={{fontSize:"13px",fontWeight:"700",color:"#16a34a"}}>Clear Skies</span>
               <button onClick={openWeather} style={{fontSize:"11px",fontWeight:"600",color:"#15803d",background:"#dcfce7",borderRadius:"999px",padding:"2px 10px"}}>Edit</button>
             </div>
@@ -472,34 +474,47 @@
           </div>
         </div>
 
+        {/* MONTH PILL */}
+        <div style={{display:"flex",justifyContent:"center",margin:"4px 0"}}>
+          <button style={{display:"flex",alignItems:"center",gap:"6px",borderRadius:"999px",border:"1px solid #f1f5f9",background:"#fff",padding:"5px 18px",fontSize:"13px",fontWeight:"800",color:"#111827",boxShadow:"0 1px 4px rgba(0,0,0,0.07)"}}>
+            {curLabel} <span style={{fontSize:"10px",color:"#94a3b8"}}>▼</span>
+          </button>
+        </div>
+
         {/* DAY HEADERS */}
-        <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",borderBottom:"1px solid #e5e7eb"}}>
-          {dows.map(d=><div key={d} style={{textAlign:"center",fontSize:"11px",fontWeight:"600",color:"#9ca3af",padding:"3px 0"}}>{d}</div>)}
+        <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",padding:"0 2px",borderBottom:"1px solid #e5e7eb"}}>
+          {dows.map(d=><div key={d} style={{textAlign:"center",fontSize:"10px",fontWeight:"700",color:"#94a3b8",padding:"3px 0",letterSpacing:"0.05em",textTransform:"uppercase"}}>{d}</div>)}
         </div>
 
         {/* CALENDAR SCROLL AREA */}
         <div ref={scrollRef} style={{flex:1,overflowY:"auto",WebkitOverflowScrolling:"touch",paddingBottom:"8px"}} onScroll={handleScroll}>
           {months.map(({year,month},mi)=>{
             const isCur=year===now.getFullYear()&&month===now.getMonth();
-            const fd=(new Date(year,month,1).getDay()+6)%7; // blanks before day 1
+            const fd=(new Date(year,month,1).getDay()+6)%7;
             const dim=new Date(year,month+1,0).getDate();
             const label=new Date(year,month,1).toLocaleString("default",{month:"long",year:"numeric"});
             const cells=[];
-            for(let i=0;i<fd;i++)cells.push(null); // null = blank
+            for(let i=0;i<fd;i++)cells.push(null);
             for(let d=1;d<=dim;d++)cells.push(d);
 
             return(
-              <div key={`${year}-${month}`} style={{position:"relative"}}>
+              <div key={`${year}-${month}`}>
+                {mi>0&&(
+                  <div style={{display:"flex",justifyContent:"center",padding:"10px 0 6px"}}>
+                    <div style={{display:"flex",alignItems:"center",gap:"6px",borderRadius:"999px",border:"1px solid #f1f5f9",background:"#fff",padding:"4px 16px",fontSize:"12px",fontWeight:"700",color:"#374151",boxShadow:"0 1px 4px rgba(0,0,0,0.07)"}}>
+                      {label} <span style={{fontSize:"10px",color:"#94a3b8"}}>▼</span>
+                    </div>
+                  </div>
+                )}
                 <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)"}}>
                   {cells.map((day,i)=>{
-                    const col=i%7; // 0=Mon…6=Sun
+                    const col=i%7;
                     if(day===null)return<div key={i} style={CS}/>;
                     const isToday=isCur&&day===now.getDate();
                     const isPast=isCur&&day<now.getDate();
                     const evs=(calendarEvents[`${year}-${month}`]?.[day])||[];
                     const balV=runBal[`${year}-${month}-${day}`];
                     const showBalNum=!isPast&&!isToday&&(evs.length>0||col===5||col===6)&&balV!=null;
-                    const isFirstOfNewMonth=day===1&&mi>0;
                     const budget=getBudget(col,day,dim);
 
                     const evBorderColor=e=>{
@@ -521,11 +536,10 @@
 
                     return(
                       <button key={i} onClick={()=>onDayTap?.(month,day)} style={CS}>
-                        {isFirstOfNewMonth&&<div style={{fontSize:"8px",fontWeight:"600",color:"#9ca3af",lineHeight:"1.2"}}>{MON_SHORT[month]}</div>}
-                        <span style={{display:"inline-grid",placeItems:"center",height:"23px",width:"23px",borderRadius:"50%",fontSize:"13px",fontWeight:"700",background:isToday?"#3b82f6":"transparent",color:isToday?"#fff":"#111827"}}>{day}</span>
+                        <span style={{display:"inline-grid",placeItems:"center",height:"24px",width:"24px",borderRadius:"50%",fontSize:"13px",fontWeight:"700",background:isToday?"#3b82f6":"transparent",color:isToday?"#fff":isPast?"#cbd5e1":"#111827"}}>{day}</span>
                         {isToday&&evs.length===0&&<div style={{fontSize:"9px",color:"#9ca3af",marginTop:"1px"}}>$0</div>}
-                        {showBalNum&&<div style={{fontSize:"9px",fontWeight:"800",color:"#3b82f6",lineHeight:"1.2",marginTop:"1px"}}>{fmtBal(balV)}</div>}
-                        <div style={{marginTop:"2px",display:"flex",flexDirection:"column",gap:"2px"}}>
+                        {showBalNum&&<div style={{fontSize:"9px",fontWeight:"800",color:"#3b82f6",lineHeight:"1.3",marginTop:"1px"}}>{fmtBal(balV)}</div>}
+                        <div style={{marginTop:"3px",display:"flex",flexDirection:"column",gap:"2px"}}>
                           {evs.slice(0,2).map((e,ki)=>(
                             <div key={ki} style={{borderRadius:"4px",borderLeft:`2px solid ${evBorderColor(e)}`,background:evBgColor(e),padding:"2px 3px",overflow:"hidden"}}>
                               <div style={{fontSize:"8px",fontWeight:"600",color:"#1e293b",lineHeight:"1.3",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{e.emoji} {e.label}</div>
@@ -534,7 +548,7 @@
                           ))}
                           {evs.length>2&&<div style={{fontSize:"7px",color:"#9ca3af"}}>+{evs.length-2}</div>}
                         </div>
-                        {budget&&<div style={{marginTop:"2px"}}>
+                        {budget&&<div style={{marginTop:"3px"}}>
                           <div style={{fontSize:"7px",color:"#9ca3af",lineHeight:"1.6"}}>{budget[0]}</div>
                           {budget[1]&&<div style={{fontSize:"7px",color:"#6b7280",lineHeight:"1.6"}}>{budget[1]}</div>}
                           {budget[2]&&<div style={{fontSize:"7px",color:"#9ca3af",lineHeight:"1.6"}}>{budget[2]}</div>}
@@ -543,21 +557,6 @@
                     );
                   })}
                 </div>
-                {/* Floating month label — positioned at the FIRST VISIBLE row center */}
-                {(()=>{
-                  // For current month: first visible row is (todayRow-1), so label center = (todayRow-0.5)*CELL_H
-                  // For future months: first row is row 0, so label center = 0.5*CELL_H
-                  const mfd=(new Date(year,month,1).getDay()+6)%7;
-                  const todayRowInMonth=isCur?Math.floor((mfd+now.getDate()-1)/7):0;
-                  const firstVisRow=isCur?Math.max(0,todayRowInMonth-1):0;
-                  const labelTop=(firstVisRow+0.5)*CELL_H;
-                  return(
-                    <div style={{position:"absolute",top:`${labelTop}px`,left:"50%",transform:"translate(-50%,-50%)",zIndex:5,pointerEvents:"none",background:"rgba(255,255,255,0.96)",borderRadius:"999px",padding:"5px 18px",boxShadow:"0 2px 12px rgba(0,0,0,0.14)",display:"flex",alignItems:"center",gap:"5px",whiteSpace:"nowrap"}}>
-                      <span style={{fontSize:"13px",fontWeight:"700",color:"#374151"}}>{label}</span>
-                      <span style={{fontSize:"12px",color:"#9ca3af"}}>▾</span>
-                    </div>
-                  );
-                })()}
               </div>
             );
           })}
@@ -1569,7 +1568,7 @@
   </script>
   <script>
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/sw.js?v=34');
+      navigator.serviceWorker.register('/sw.js?v=35');
     }
   </script>
 </body>
