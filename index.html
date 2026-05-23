@@ -265,17 +265,17 @@
     function DownloadIcon(){return<svg {...ICON}><path d="M12 3v12M7 11l5 5 5-5M4 20h16"/></svg>;}
     function SunIcon(){return<svg {...ICON}><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5 19 19M19 5l-1.5 1.5M6.5 17.5 5 19"/></svg>;}
     function CalendarIcon(){return<svg {...ICON}><rect x="3" y="4.5" width="18" height="16" rx="3"/><path d="M3 9h18M8 2.5v4M16 2.5v4"/>{[8,12,16].map(x=>[12,16].map(y=><circle key={`${x}-${y}`} cx={x} cy={y} r="0.6" fill="currentColor" stroke="none"/>))}</svg>;}
-    function PieIcon(){return<svg {...ICON}><path d="M12 3a9 9 0 1 0 9 9h-9V3z"/><path d="M12 3v9h9" opacity="0.35"/></svg>;}
+    function ClockIcon(){return<svg {...ICON}><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>;}
     function PlusIcon(){return<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round"><path d="M12 5v14M5 12h14"/></svg>;}
     function GridIcon(){return<svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">{[5,12,19].map(x=>[5,12,19].map(y=><circle key={`${x}-${y}`} cx={x} cy={y} r="1.6"/>))}</svg>;}
     function CardIcon(){return<svg {...ICON}><rect x="2.5" y="6" width="19" height="13" rx="2.5"/><path d="M2.5 10.5h6"/></svg>;}
     function DockBtn({active,onClick,label,children}){return<button onClick={onClick} aria-label={label} className={cx("grid h-12 w-12 place-items-center rounded-full transition active:scale-90",active?"text-[#5b7cfa]":"text-slate-800")}>{children}</button>;}
-    function DockNav({active,onSelect,onAdd,addOpen,visible=true}){
+    function DockNav({active,onSelect,onAdd,addOpen}){
       return(
-        <div className="absolute bottom-0 left-0 right-0 z-20 flex justify-center pointer-events-none" style={{paddingBottom:"env(safe-area-inset-bottom,0px)",transform:visible?"translateY(0)":"translateY(120%)",opacity:visible?1:0,transition:"transform 0.32s cubic-bezier(0.4,0,0.2,1),opacity 0.32s ease"}}>
-          <div className="flex items-center justify-between rounded-full bg-white px-3 py-2 shadow-[0_8px_32px_rgba(0,0,0,0.18)] ring-1 ring-black/6 pointer-events-auto" style={{width:"88%",maxWidth:"360px"}}>
+        <div style={{flexShrink:0,display:"flex",justifyContent:"center",background:"#fff",paddingTop:"8px",paddingBottom:"max(env(safe-area-inset-bottom,10px),10px)"}}>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",borderRadius:"999px",background:"#fff",boxShadow:"0 4px 24px rgba(0,0,0,0.13)",border:"1px solid rgba(0,0,0,0.06)",padding:"6px 12px",width:"88%",maxWidth:"360px"}}>
             <DockBtn label="calendar" active={active==="home"} onClick={()=>onSelect("home")}><CalendarIcon/></DockBtn>
-            <DockBtn label="insights" active={active==="insights"} onClick={()=>onSelect("insights")}><PieIcon/></DockBtn>
+            <DockBtn label="history" active={active==="history"} onClick={()=>onSelect("history")}><ClockIcon/></DockBtn>
             <button onClick={onAdd} aria-label="Add" className="mx-1 grid h-14 w-14 place-items-center rounded-full bg-[#5b7cfa] text-white shadow-lg active:scale-90" style={{transition:"transform 0.25s cubic-bezier(0.34,1.56,0.64,1)",transform:addOpen?"rotate(45deg)":"rotate(0deg)"}}><PlusIcon/></button>
             <DockBtn label="debt" active={active==="debt"} onClick={()=>onSelect("debt")}><GridIcon/></DockBtn>
             <DockBtn label="goals" active={active==="goals"} onClick={()=>onSelect("goals")}><CardIcon/></DockBtn>
@@ -372,86 +372,183 @@
     }
 
     // ── CalendarLive ──────────────────────────────────────
+    const MON_SHORT=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
     function CalendarLive({openMenu,openCash,openInsights,openWeather,onDayTap,today="$0",balanceDisplay="$0",userName="",calendarEvents={},onScrollDir}){
       const dows=["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
       const now=new Date();
       const scrollRef=useRef(null);
       const lastTop=useRef(0);
+      const CELL_H=88;
 
-      const months=useMemo(()=>{
-        const result=[];
-        for(let i=0;i<28;i++){
-          const d=new Date(now.getFullYear(),now.getMonth()+i,1);
-          result.push({year:d.getFullYear(),month:d.getMonth()});
+      // Running balance: accumulate future events (after today) from base
+      const runBal=useMemo(()=>{
+        const BASE=7500; let bal=BASE; const map={};
+        for(let d=1;d<=31;d++){
+          (calendarEvents[d]||[]).forEach(e=>{bal+=e.amt;});
+          map[d]=Math.round(bal);
         }
-        return result;
+        return map;
+      },[calendarEvents]);
+
+      const fmtBal=v=>v>=1000?`$${(v/1000).toFixed(1)}k`:`$${v}`;
+
+      // Months starting from CURRENT month (no previous month offset)
+      const months=useMemo(()=>{
+        const res=[];
+        for(let i=0;i<15;i++){
+          const d=new Date(now.getFullYear(),now.getMonth()+i,1);
+          res.push({year:d.getFullYear(),month:d.getMonth()});
+        }
+        return res;
+      },[]);
+
+      // Pure math scroll to show 1 row above today
+      useEffect(()=>{
+        const el=scrollRef.current; if(!el)return;
+        const fd=(new Date(now.getFullYear(),now.getMonth(),1).getDay()+6)%7;
+        const todayRow=Math.floor((fd+now.getDate()-1)/7);
+        el.scrollTop=Math.max(0,(todayRow-1)*CELL_H);
       },[]);
 
       const handleScroll=()=>{
-        const el=scrollRef.current;if(!el)return;
+        const el=scrollRef.current; if(!el)return;
         const st=el.scrollTop;
-        if(Math.abs(st-lastTop.current)>4){
+        if(Math.abs(st-lastTop.current)>8){
           onScrollDir?.(st>lastTop.current?"up":"down");
           lastTop.current=st;
         }
       };
 
-      return(<div className="flex h-full flex-col bg-white">
-        <div className="flex items-center justify-between px-3 pb-1 text-slate-900" style={{paddingTop:"calc(env(safe-area-inset-top,0px) + 10px)"}}>
-          <div className="flex gap-1.5">
-            <button onClick={openMenu} className="grid h-10 w-10 place-items-center rounded-full bg-slate-100 text-slate-900 transition active:scale-90"><MenuIcon/></button>
-            <div className="grid h-10 w-10 place-items-center rounded-full bg-slate-100 text-slate-500"><ChatIcon/></div>
+      const getBudget=(col,day,dim)=>{
+        if(col!==6)return null;
+        const isLast=day+7>dim;
+        const wk=Math.ceil(day/7);
+        if(isLast)return["Budget end",null,null];
+        if(wk%2===0)return["Budget end","Set budget","Remaining $0"];
+        return["Budget start","Set budget",null];
+      };
+
+      const BD="1px solid #f0f0f0";
+      const CS={borderBottom:BD,borderRight:BD,minHeight:`${CELL_H}px`,padding:"4px 3px 2px",textAlign:"left",background:"#fff",display:"block",width:"100%",overflow:"hidden",boxSizing:"border-box"};
+
+      return(
+      <div style={{position:"absolute",inset:0,display:"flex",flexDirection:"column",background:"#fff"}}>
+
+        {/* TOP BAR */}
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"0 10px 5px",paddingTop:"calc(env(safe-area-inset-top,0px) + 8px)"}}>
+          <div style={{display:"flex",gap:"6px"}}>
+            <button onClick={openMenu} style={{width:"38px",height:"38px",borderRadius:"12px",background:"#f3f4f6",display:"grid",placeItems:"center"}}><MenuIcon/></button>
+            <button style={{width:"38px",height:"38px",borderRadius:"12px",background:"#f3f4f6",display:"grid",placeItems:"center",color:"#6b7280"}}><ChatIcon/></button>
           </div>
-          <button onClick={openCash} className="rounded-full bg-slate-100 px-4 py-1 text-center transition active:scale-95">
-            <div className="text-lg font-extrabold leading-none text-slate-900">{today}</div>
-            <div className="text-[10px] font-semibold text-slate-500">tap for breakdown</div>
+          <button onClick={openCash} style={{background:"#f3f4f6",borderRadius:"999px",padding:"5px 22px",textAlign:"center"}}>
+            <div style={{fontSize:"20px",fontWeight:"800",color:"#111827",lineHeight:"1.1"}}>{today}</div>
+            <div style={{fontSize:"10px",color:"#9ca3af",fontWeight:"500",marginTop:"1px"}}>Updated 3 days ago</div>
           </button>
-          <div className="flex gap-1.5">
-            <button onClick={openInsights} className="grid h-10 w-10 place-items-center rounded-full bg-slate-100 text-slate-500 transition active:scale-90"><BarsIcon/></button>
-            <button onClick={openWeather} className="grid h-10 w-10 place-items-center rounded-full bg-slate-100 text-slate-400 transition active:scale-90"><TrophyIcon/></button>
+          <div style={{display:"flex",gap:"6px"}}>
+            <button onClick={openInsights} style={{width:"38px",height:"38px",borderRadius:"12px",background:"#f3f4f6",display:"grid",placeItems:"center",color:"#6b7280"}}><BarsIcon/></button>
+            <button onClick={openWeather} style={{width:"38px",height:"38px",borderRadius:"12px",background:"#f3f4f6",display:"grid",placeItems:"center",color:"#9ca3af"}}><TrophyIcon/></button>
           </div>
         </div>
-        <div className="mx-3 mb-1 flex items-center gap-2 rounded-2xl border-l-4 border-emerald-500 bg-emerald-50 px-3 py-1.5 text-slate-900">
-          <span className="text-xl">☀️</span>
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-extrabold text-emerald-600">Clear Skies</span>
-              <button onClick={openWeather} className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">Edit</button>
+
+        {/* CLEAR SKIES BANNER */}
+        <div style={{margin:"0 10px 6px",background:"#f0fdf4",borderRadius:"14px",borderLeft:"4px solid #22c55e",padding:"7px 10px 7px 10px",display:"flex",gap:"8px",alignItems:"flex-start"}}>
+          <span style={{fontSize:"20px",lineHeight:"1"}}>☀️</span>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"3px"}}>
+              <span style={{fontSize:"13px",fontWeight:"700",color:"#16a34a"}}>Clear Skies</span>
+              <button onClick={openWeather} style={{fontSize:"11px",fontWeight:"600",color:"#15803d",background:"#dcfce7",borderRadius:"999px",padding:"2px 10px"}}>Edit</button>
             </div>
-            <p className="text-[11px] font-medium text-emerald-700 truncate">{userName?"Hey "+userName+"! ":""}Balance: <b>{balanceDisplay}</b></p>
+            <div style={{fontSize:"11px",color:"#15803d",lineHeight:"1.4",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>After 🏠 Rent + 1 expense on Jun 3, you'll have <b>$6k</b> left</div>
           </div>
         </div>
-        <div className="grid grid-cols-7 border-b border-t border-slate-100 bg-white">
-          {dows.map(d=><div key={d} className="py-1 text-center text-[10px] font-bold uppercase tracking-wider text-slate-400">{d}</div>)}
+
+        {/* DAY HEADERS */}
+        <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",borderBottom:"1px solid #e5e7eb"}}>
+          {dows.map(d=><div key={d} style={{textAlign:"center",fontSize:"11px",fontWeight:"600",color:"#9ca3af",padding:"3px 0"}}>{d}</div>)}
         </div>
-        <div ref={scrollRef} className="flex-1 overflow-y-auto" style={{paddingBottom:"calc(env(safe-area-inset-bottom,0px) + 80px)"}} onScroll={handleScroll}>
-          {months.map(({year,month})=>{
-            const isCur=now.getFullYear()===year&&now.getMonth()===month;
-            const firstDay=(new Date(year,month,1).getDay()+6)%7;
-            const daysInMonth=new Date(year,month+1,0).getDate();
+
+        {/* CALENDAR SCROLL AREA */}
+        <div ref={scrollRef} style={{flex:1,overflowY:"auto",WebkitOverflowScrolling:"touch",paddingBottom:"calc(env(safe-area-inset-bottom,8px) + 76px)"}} onScroll={handleScroll}>
+          {months.map(({year,month},mi)=>{
+            const isCur=year===now.getFullYear()&&month===now.getMonth();
+            const fd=(new Date(year,month,1).getDay()+6)%7; // blanks before day 1
+            const dim=new Date(year,month+1,0).getDate();
             const label=new Date(year,month,1).toLocaleString("default",{month:"long",year:"numeric"});
             const cells=[];
-            for(let i=0;i<firstDay;i++)cells.push({blank:true});
-            for(let d=1;d<=daysInMonth;d++)cells.push({day:d});
-            return(<div key={`${year}-${month}`}>
-              <div className="px-3 py-1.5 bg-slate-50 border-b border-slate-100">
-                <span className="text-xs font-extrabold uppercase tracking-wider text-slate-500">{label}</span>
-              </div>
-              <div className="grid grid-cols-7">
-                {cells.map((c,i)=>{
-                  if(c.blank)return<div key={i} className="border-b border-r border-slate-100 min-h-[68px]"/>;
-                  const liveEvs=(isCur?calendarEvents[c.day]:[])||[];
-                  const isToday=isCur&&c.day===now.getDate();
-                  return(<button key={i} onClick={()=>onDayTap?.(month,c.day)} className="border-b border-r border-slate-100 p-1 text-left align-top overflow-hidden min-h-[68px] transition active:bg-slate-50">
-                    <span className={cx("grid h-6 w-6 place-items-center rounded-full text-xs font-bold",isToday?"bg-blue-500 text-white":"text-slate-800")}>{c.day}</span>
-                    <div className="mt-0.5 space-y-0.5">
-                      {liveEvs.slice(0,2).map((e,ki)=>(<div key={ki} className={cx("rounded border-l-2 px-1 py-0.5",e.color)}><div className="truncate text-[8px] font-bold text-slate-800">{e.emoji} {e.label}</div></div>))}
-                      {liveEvs.length>2&&<div className="text-[7px] text-slate-400 pl-0.5">+{liveEvs.length-2}</div>}
+            for(let i=0;i<fd;i++)cells.push(null); // null = blank
+            for(let d=1;d<=dim;d++)cells.push(d);
+
+            return(
+              <div key={`${year}-${month}`} style={{position:"relative"}}>
+                <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)"}}>
+                  {cells.map((day,i)=>{
+                    const col=i%7; // 0=Mon…6=Sun
+                    if(day===null)return<div key={i} style={CS}/>;
+                    const isToday=isCur&&day===now.getDate();
+                    const isPast=isCur&&day<now.getDate();
+                    const evs=(isCur?calendarEvents[day]:[])||[];
+                    const balV=isCur?runBal[day]:null;
+                    const showBalNum=isCur&&!isPast&&(evs.length>0||col===5||col===6)&&balV!=null;
+                    const isFirstOfNewMonth=day===1&&mi>0;
+                    const budget=getBudget(col,day,dim);
+
+                    const evBorderColor=e=>{
+                      if(e.amt>0)return"#4ade80";
+                      if(e.color?.includes("rose"))return"#f87171";
+                      if(e.color?.includes("amber"))return"#fbbf24";
+                      if(e.color?.includes("purple"))return"#c084fc";
+                      if(e.color?.includes("sky"))return"#38bdf8";
+                      return"#94a3b8";
+                    };
+                    const evBgColor=e=>{
+                      if(e.amt>0)return"#f0fdf4";
+                      if(e.color?.includes("rose"))return"#fff1f2";
+                      if(e.color?.includes("amber"))return"#fefce8";
+                      if(e.color?.includes("purple"))return"#faf5ff";
+                      if(e.color?.includes("sky"))return"#f0f9ff";
+                      return"#f9fafb";
+                    };
+
+                    return(
+                      <button key={i} onClick={()=>onDayTap?.(month,day)} style={CS}>
+                        {isFirstOfNewMonth&&<div style={{fontSize:"8px",fontWeight:"600",color:"#9ca3af",lineHeight:"1.2"}}>{MON_SHORT[month]}</div>}
+                        <span style={{display:"inline-grid",placeItems:"center",height:"23px",width:"23px",borderRadius:"50%",fontSize:"13px",fontWeight:"700",background:isToday?"#3b82f6":"transparent",color:isToday?"#fff":"#111827"}}>{day}</span>
+                        {isToday&&evs.length===0&&<div style={{fontSize:"9px",color:"#9ca3af",marginTop:"1px"}}>$0</div>}
+                        {showBalNum&&<div style={{fontSize:"9px",fontWeight:"800",color:"#3b82f6",lineHeight:"1.2",marginTop:"1px"}}>{fmtBal(balV)}</div>}
+                        <div style={{marginTop:"2px",display:"flex",flexDirection:"column",gap:"2px"}}>
+                          {evs.slice(0,2).map((e,ki)=>(
+                            <div key={ki} style={{borderRadius:"4px",borderLeft:`2px solid ${evBorderColor(e)}`,background:evBgColor(e),padding:"2px 3px",overflow:"hidden"}}>
+                              <div style={{fontSize:"8px",fontWeight:"600",color:"#1e293b",lineHeight:"1.3",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{e.emoji} {e.label}</div>
+                              <div style={{fontSize:"8px",fontWeight:"700",lineHeight:"1",color:e.amt>0?"#16a34a":"#ef4444"}}>{e.amt>0?"+":""}{fmt(Math.abs(e.amt))}</div>
+                            </div>
+                          ))}
+                          {evs.length>2&&<div style={{fontSize:"7px",color:"#9ca3af"}}>+{evs.length-2}</div>}
+                        </div>
+                        {budget&&<div style={{marginTop:"2px"}}>
+                          <div style={{fontSize:"7px",color:"#9ca3af",lineHeight:"1.6"}}>{budget[0]}</div>
+                          {budget[1]&&<div style={{fontSize:"7px",color:"#6b7280",lineHeight:"1.6"}}>{budget[1]}</div>}
+                          {budget[2]&&<div style={{fontSize:"7px",color:"#9ca3af",lineHeight:"1.6"}}>{budget[2]}</div>}
+                        </div>}
+                      </button>
+                    );
+                  })}
+                </div>
+                {/* Floating month label — positioned at the FIRST VISIBLE row center */}
+                {(()=>{
+                  // For current month: first visible row is (todayRow-1), so label center = (todayRow-0.5)*CELL_H
+                  // For future months: first row is row 0, so label center = 0.5*CELL_H
+                  const mfd=(new Date(year,month,1).getDay()+6)%7;
+                  const todayRowInMonth=isCur?Math.floor((mfd+now.getDate()-1)/7):0;
+                  const labelTop=isCur?((todayRowInMonth-1)+0.5)*CELL_H:CELL_H/2;
+                  return(
+                    <div style={{position:"absolute",top:`${labelTop}px`,left:"50%",transform:"translate(-50%,-50%)",zIndex:5,pointerEvents:"none",background:"rgba(255,255,255,0.96)",borderRadius:"999px",padding:"5px 18px",boxShadow:"0 2px 12px rgba(0,0,0,0.14)",display:"flex",alignItems:"center",gap:"5px",whiteSpace:"nowrap"}}>
+                      <span style={{fontSize:"13px",fontWeight:"700",color:"#374151"}}>{label}</span>
+                      <span style={{fontSize:"12px",color:"#9ca3af"}}>▾</span>
                     </div>
-                  </button>);
-                })}
+                  );
+                })()}
               </div>
-            </div>);
+            );
           })}
         </div>
       </div>);
@@ -786,7 +883,7 @@
       const totalIncome=transactions.filter(t=>t.type==="income").reduce((s,t)=>s+t.amt,0);
       const totalSpent=transactions.filter(t=>t.type==="expense").reduce((s,t)=>s+t.amt,0);
       return(
-        <div className="flex h-full flex-col" style={{background:"#f2f2f7",paddingTop:"calc(env(safe-area-inset-top,50px) + 12px)"}}>
+        <div className="flex h-full flex-col bg-white" style={{paddingTop:"calc(env(safe-area-inset-top,50px) + 12px)"}}>
           {/* Header */}
           <div className="relative flex items-center justify-center px-5 pb-3">
             <span className="text-xs font-bold tracking-[0.15em] text-slate-500 uppercase">Cash Balance</span>
@@ -808,12 +905,12 @@
             ))}
           </div>
           {/* Content */}
-          <div className="flex-1 overflow-y-auto px-5" style={{paddingBottom:"calc(env(safe-area-inset-bottom,20px)+16px)"}}>
+          <div className="flex-1 overflow-y-auto px-5" style={{paddingBottom:"calc(env(safe-area-inset-bottom,0px)+16px)"}}>
             {tab==="Accounts"&&(
               <>
                 <p className="mb-3 text-[11px] font-bold uppercase tracking-widest text-slate-400">Included in Projections</p>
                 {allAccounts.map((a,i)=>(
-                  <div key={i} className="mb-3 flex items-center justify-between rounded-2xl border-2 border-blue-400 bg-white px-4 py-4">
+                  <div key={i} className="mb-3 flex items-center justify-between rounded-2xl border-2 border-blue-400 bg-white px-4 py-4" style={{background:"#f2f2f7"}}>
                     <div className="flex items-center gap-3">
                       <div className="grid h-6 w-6 place-items-center rounded-md bg-blue-500 text-white text-xs font-bold">✓</div>
                       <div>
@@ -824,6 +921,22 @@
                     <span className="text-lg font-extrabold text-blue-500">{money(a.balance)}</span>
                   </div>
                 ))}
+                <div className="mt-1 mb-3 rounded-2xl bg-slate-50 p-4">
+                  <p className="text-[11px] font-bold uppercase tracking-widest text-slate-400 mb-3">Monthly Summary</p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="rounded-xl bg-white p-3 text-center shadow-sm"><div className="text-xs font-semibold text-slate-400 mb-1">Income</div><div className="text-lg font-extrabold text-emerald-500">+{money(totalIncome||3680)}</div></div>
+                    <div className="rounded-xl bg-white p-3 text-center shadow-sm"><div className="text-xs font-semibold text-slate-400 mb-1">Spent</div><div className="text-lg font-extrabold text-rose-500">-{money(totalSpent||1200)}</div></div>
+                  </div>
+                  <div className="mt-3 rounded-xl bg-white p-3 flex items-center justify-between shadow-sm">
+                    <span className="text-sm font-semibold text-slate-700">Net This Month</span>
+                    <span className="font-extrabold text-blue-500">{money((totalIncome||3680)-(totalSpent||1200))}</span>
+                  </div>
+                </div>
+                <button onClick={onClose} className="w-full rounded-2xl border-2 border-dashed border-slate-200 p-4 text-center" style={{marginBottom:"4px"}}>
+                  <div className="text-2xl mb-1">🏛️</div>
+                  <div className="font-bold text-slate-700">Connect a Bank</div>
+                  <div className="text-xs text-slate-400 mt-0.5">Sync balances &amp; transactions automatically</div>
+                </button>
               </>
             )}
             {tab==="Transactions"&&(
@@ -1391,7 +1504,8 @@
         transactions,addTransaction,
         today:balanceDisplay,balanceDisplay,calendarEvents,liveCategories,userName,
       };
-      return(<div className={cx("relative overflow-hidden transition-colors font-sans",dark?"bg-slate-900 text-slate-100":"bg-white")} style={{position:"fixed",top:0,left:0,right:0,bottom:0}}>
+      return(
+        <div style={{position:"fixed",top:0,left:0,right:0,bottom:0,display:"flex",flexDirection:"column",background:"#fff"}}>
           {!booted?<SplashScreen onDone={()=>setBooted(true)}/>:(
             <>
               {phase==="onboarding"&&<Onboarding onDone={({name,lang})=>{setUserName(name);setUserLang(lang);setPhase("setup");}}/>}
@@ -1401,34 +1515,39 @@
               {phase==="allSet"&&<AllSet onDone={()=>setPhase("app")}/>}
               {phase==="app"&&(
                 <TabCtx.Provider value={{tab,setTab}}>
-                  {tab==="home"&&<CalendarLive {...cp} onDayTap={()=>{setAddMenuOpen(false);setOverlay("add");}} onScrollDir={dir=>{if(dir==="up")setDockVisible(false);else setDockVisible(true);}}/>}
-                  {tab==="history"&&<History {...cp}/>}
-                  {tab==="budget"&&<Budget {...cp}/>}
-                  {tab==="debt"&&<Debt {...cp}/>}
-                  {tab==="goals"&&<Goals {...cp} goals={goals} setGoals={setGoals}/>}
-                  {tab==="profile"&&<Profile openMenu={cp.openMenu} openAdd={cp.openAdd} connectedBanks={connectedBanks} onBankConnect={onBankConnect} userName={userName} setUserName={setUserName} userEmail={userEmail} setUserEmail={setUserEmail}/>}
-                  {tab==="settings"&&<Settings openMenu={cp.openMenu} dark={dark} setDark={setDark} accent={accent} setAccent={setAccent} resetApp={resetApp} userLang={userLang} setUserLang={setUserLang}/>}
-                  {overlay==="insights"&&<SwipeClose onClose={()=>setOverlay(null)} className="absolute inset-0 z-30 bg-white"><Insights onClose={()=>setOverlay(null)}/></SwipeClose>}
-                  {overlay==="cash"&&<SwipeClose onClose={()=>setOverlay(null)} className="absolute inset-0 z-30 bg-white"><CashBalance onClose={()=>setOverlay(null)} connectedBanks={connectedBanks} totalBalance={totalBalance} transactions={transactions}/></SwipeClose>}
-                  {overlay==="weather"&&<SwipeClose onClose={()=>setOverlay(null)} className="absolute inset-0 z-30 bg-white"><WeatherWarnings onClose={()=>setOverlay(null)}/></SwipeClose>}
-                  {(overlay==="add"||overlay==="expense"||overlay==="income")&&<SwipeClose onClose={()=>setOverlay(null)} className="absolute inset-0 z-30"><AddTransaction initialType={overlay==="income"?"income":"expense"} onClose={()=>setOverlay(null)} onAdd={addTransaction}/></SwipeClose>}
-                  {overlay==="goal_quick"&&<SwipeClose onClose={()=>setOverlay(null)} className="absolute inset-0 z-30"><AddGoalSheet onSave={g=>{setGoals(p=>[...p,g]);setOverlay(null);}} onClose={()=>setOverlay(null)}/></SwipeClose>}
-                  {addMenuOpen&&<QuickAddMenu onClose={()=>setAddMenuOpen(false)} onExpense={()=>{setAddMenuOpen(false);setOverlay("expense");}} onIncome={()=>{setAddMenuOpen(false);setOverlay("income");}} onGoal={()=>{setAddMenuOpen(false);setOverlay("goal_quick");}}/>}
-                  {overlay==="updates"&&<SwipeClose onClose={()=>setOverlay(null)} className="absolute inset-0 z-40"><UpdatesSheet onClose={()=>setOverlay(null)}/></SwipeClose>}
-                  <SideMenu open={menuOpen} onClose={()=>setMenuOpen(false)} go={go} dark={dark} setDark={setDark} onCheckUpdate={()=>showToast("You're on the latest version ✓")}/>
-                  <DockNav active={tab} onSelect={dest=>{if(tab!=="home")setDockVisible(true);setAddMenuOpen(false);dest==="insights"?setOverlay("insights"):setTab(dest);}} onAdd={()=>setAddMenuOpen(p=>!p)} addOpen={addMenuOpen} visible={tab!=="home"||dockVisible}/>
-                  {toast&&<div className="absolute bottom-28 left-1/2 z-50 -translate-x-1/2 whitespace-nowrap rounded-full bg-slate-900 px-5 py-3 text-sm font-semibold text-white shadow-xl">{toast}</div>}
+                  {/* Tab content fills remaining space */}
+                  <div style={{flex:1,position:"relative",overflow:"hidden",minHeight:0}}>
+                    {tab==="home"&&<CalendarLive {...cp} onDayTap={()=>{setAddMenuOpen(false);setOverlay("add");}} onScrollDir={dir=>{if(dir==="up")setDockVisible(false);else setDockVisible(true);}}/>}
+                    {tab==="history"&&<History {...cp}/>}
+                    {tab==="budget"&&<Budget {...cp}/>}
+                    {tab==="debt"&&<Debt {...cp}/>}
+                    {tab==="goals"&&<Goals {...cp} goals={goals} setGoals={setGoals}/>}
+                    {tab==="profile"&&<Profile openMenu={cp.openMenu} openAdd={cp.openAdd} connectedBanks={connectedBanks} onBankConnect={onBankConnect} userName={userName} setUserName={setUserName} userEmail={userEmail} setUserEmail={setUserEmail}/>}
+                    {tab==="settings"&&<Settings openMenu={cp.openMenu} dark={dark} setDark={setDark} accent={accent} setAccent={setAccent} resetApp={resetApp} userLang={userLang} setUserLang={setUserLang}/>}
+                    {overlay==="insights"&&<SwipeClose onClose={()=>setOverlay(null)} className="absolute inset-0 z-30 bg-white"><Insights onClose={()=>setOverlay(null)}/></SwipeClose>}
+                    {overlay==="cash"&&<SwipeClose onClose={()=>setOverlay(null)} className="absolute inset-0 z-30 bg-white"><CashBalance onClose={()=>setOverlay(null)} connectedBanks={connectedBanks} totalBalance={totalBalance} transactions={transactions}/></SwipeClose>}
+                    {overlay==="weather"&&<SwipeClose onClose={()=>setOverlay(null)} className="absolute inset-0 z-30 bg-white"><WeatherWarnings onClose={()=>setOverlay(null)}/></SwipeClose>}
+                    {(overlay==="add"||overlay==="expense"||overlay==="income")&&<SwipeClose onClose={()=>setOverlay(null)} className="absolute inset-0 z-30"><AddTransaction initialType={overlay==="income"?"income":"expense"} onClose={()=>setOverlay(null)} onAdd={addTransaction}/></SwipeClose>}
+                    {overlay==="goal_quick"&&<SwipeClose onClose={()=>setOverlay(null)} className="absolute inset-0 z-30"><AddGoalSheet onSave={g=>{setGoals(p=>[...p,g]);setOverlay(null);}} onClose={()=>setOverlay(null)}/></SwipeClose>}
+                    {addMenuOpen&&<QuickAddMenu onClose={()=>setAddMenuOpen(false)} onExpense={()=>{setAddMenuOpen(false);setOverlay("expense");}} onIncome={()=>{setAddMenuOpen(false);setOverlay("income");}} onGoal={()=>{setAddMenuOpen(false);setOverlay("goal_quick");}}/>}
+                    {overlay==="updates"&&<SwipeClose onClose={()=>setOverlay(null)} className="absolute inset-0 z-40"><UpdatesSheet onClose={()=>setOverlay(null)}/></SwipeClose>}
+                    <SideMenu open={menuOpen} onClose={()=>setMenuOpen(false)} go={go} dark={dark} setDark={setDark} onCheckUpdate={()=>showToast("You're on the latest version ✓")}/>
+                    {toast&&<div className="absolute bottom-4 left-1/2 z-50 -translate-x-1/2 whitespace-nowrap rounded-full bg-slate-900 px-5 py-3 text-sm font-semibold text-white shadow-xl">{toast}</div>}
+                  </div>
+                  {/* Dock is a real flex footer — no fixed positioning, no gap */}
+                  <DockNav active={tab} onSelect={dest=>{setAddMenuOpen(false);dest==="insights"?setOverlay("insights"):setTab(dest);}} onAdd={()=>setAddMenuOpen(p=>!p)} addOpen={addMenuOpen}/>
                 </TabCtx.Provider>
               )}
             </>
           )}
-      </div>);
+        </div>
+      );
     }
     ReactDOM.createRoot(document.getElementById("root")).render(<ForecastContainer/>);
   </script>
   <script>
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/sw.js');
+      navigator.serviceWorker.register('/sw.js?v=32');
     }
   </script>
 </body>
