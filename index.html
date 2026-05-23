@@ -380,12 +380,22 @@
       const lastTop=useRef(0);
       const CELL_H=88;
 
-      // Running balance: accumulate future events (after today) from base
+      // Running balance: accumulate future events across all months from today's balance
       const runBal=useMemo(()=>{
-        const BASE=7500; let bal=BASE; const map={};
-        for(let d=1;d<=31;d++){
-          (calendarEvents[d]||[]).forEach(e=>{bal+=e.amt;});
-          map[d]=Math.round(bal);
+        const BASE=7100; // current projected balance
+        const n=new Date();
+        const map={}; // key: "YYYY-M-D"
+        let bal=BASE;
+        for(let mi=0;mi<15;mi++){
+          const dt=new Date(n.getFullYear(),n.getMonth()+mi,1);
+          const yr=dt.getFullYear(),mo=dt.getMonth();
+          const dim=new Date(yr,mo+1,0).getDate();
+          const mevs=calendarEvents[`${yr}-${mo}`]||{};
+          for(let d=1;d<=dim;d++){
+            const isPast=mi===0&&d<n.getDate();
+            if(!isPast)(mevs[d]||[]).forEach(e=>{bal+=e.amt;});
+            map[`${yr}-${mo}-${d}`]=Math.round(bal);
+          }
         }
         return map;
       },[calendarEvents]);
@@ -486,9 +496,9 @@
                     if(day===null)return<div key={i} style={CS}/>;
                     const isToday=isCur&&day===now.getDate();
                     const isPast=isCur&&day<now.getDate();
-                    const evs=(isCur?calendarEvents[day]:[])||[];
-                    const balV=isCur?runBal[day]:null;
-                    const showBalNum=isCur&&!isPast&&(evs.length>0||col===5||col===6)&&balV!=null;
+                    const evs=(calendarEvents[`${year}-${month}`]?.[day])||[];
+                    const balV=runBal[`${year}-${month}-${day}`];
+                    const showBalNum=!isPast&&!isToday&&(evs.length>0||col===5||col===6)&&balV!=null;
                     const isFirstOfNewMonth=day===1&&mi>0;
                     const budget=getBudget(col,day,dim);
 
@@ -539,7 +549,8 @@
                   // For future months: first row is row 0, so label center = 0.5*CELL_H
                   const mfd=(new Date(year,month,1).getDay()+6)%7;
                   const todayRowInMonth=isCur?Math.floor((mfd+now.getDate()-1)/7):0;
-                  const labelTop=isCur?((todayRowInMonth-1)+0.5)*CELL_H:CELL_H/2;
+                  const firstVisRow=isCur?Math.max(0,todayRowInMonth-1):0;
+                  const labelTop=(firstVisRow+0.5)*CELL_H;
                   return(
                     <div style={{position:"absolute",top:`${labelTop}px`,left:"50%",transform:"translate(-50%,-50%)",zIndex:5,pointerEvents:"none",background:"rgba(255,255,255,0.96)",borderRadius:"999px",padding:"5px 18px",boxShadow:"0 2px 12px rgba(0,0,0,0.14)",display:"flex",alignItems:"center",gap:"5px",whiteSpace:"nowrap"}}>
                       <span style={{fontSize:"13px",fontWeight:"700",color:"#374151"}}>{label}</span>
@@ -1400,11 +1411,11 @@
 
     const STORE_KEY="cashcycle_v1";
     const DEFAULT_TXS=[
-      {id:1,type:"expense",emoji:"🛒",label:"Groceries",amt:75,date:"May 18",category:"Food"},
-      {id:2,type:"expense",emoji:"📺",label:"Netflix",amt:20,date:"May 19",category:"Entertainment"},
-      {id:3,type:"expense",emoji:"☕",label:"Coffee",amt:5,date:"May 20",category:"Food"},
-      {id:4,type:"income",emoji:"💰",label:"Paycheck",amt:1600,date:"May 20",category:"Income"},
-      {id:5,type:"expense",emoji:"🏠",label:"Rent",amt:1000,date:"May 22",category:"Bills"},
+      {id:1,type:"expense",emoji:"🚗",label:"Car Pay",amt:400,date:"May 20",category:"Transportation"},
+      {id:2,type:"income",emoji:"🕐",label:"Hourly Job",amt:1600,date:"May 22",category:"Income"},
+      {id:3,type:"expense",emoji:"🏠",label:"Rent",amt:1000,date:"Jun 1",category:"Bills"},
+      {id:4,type:"expense",emoji:"📱",label:"Phone Bill",amt:80,date:"Jun 3",category:"Bills"},
+      {id:5,type:"income",emoji:"🕐",label:"Hourly Job",amt:1600,date:"Jun 5",category:"Income"},
     ];
     function loadSaved(){try{return JSON.parse(localStorage.getItem(STORE_KEY)||"{}");}catch(e){return{};}}
 
@@ -1448,14 +1459,25 @@
       const curMonth=MONTH_NAMES[nowRef.getMonth()];
 
       const calendarEvents=useMemo(()=>{
+        const MN=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
         const map={};
         transactions.forEach(tx=>{
-          let day=null;
-          if(tx.date==="Today") day=nowRef.getDate();
-          else{ const [mon,d]=tx.date.split(" "); if(mon===curMonth&&d) day=parseInt(d); }
+          let yr,mo,day;
+          if(tx.date==="Today"){const n=new Date();yr=n.getFullYear();mo=n.getMonth();day=n.getDate();}
+          else{
+            const [mon,d]=tx.date.split(" ");
+            const mi=MN.indexOf(mon);
+            if(mi===-1||!d)return;
+            yr=nowRef.getFullYear();mo=mi;
+            if(mi<nowRef.getMonth())yr++;
+            day=parseInt(d);
+          }
           if(!day||isNaN(day))return;
-          if(!map[day])map[day]=[];
-          map[day].push({emoji:tx.emoji,label:tx.label,amt:tx.type==="income"?tx.amt:-tx.amt,color:tx.type==="income"?"bg-emerald-100 border-emerald-400":tx.category==="Bills"?"bg-rose-100 border-rose-400":tx.category==="Food"?"bg-amber-100 border-amber-400":tx.category==="Entertainment"?"bg-purple-100 border-purple-400":tx.category==="Transport"||tx.category==="Transportation"?"bg-sky-100 border-sky-400":"bg-slate-100 border-slate-400"});
+          const key=`${yr}-${mo}`;
+          if(!map[key])map[key]={};
+          if(!map[key][day])map[key][day]=[];
+          const color=tx.type==="income"?"bg-emerald-100 border-emerald-400":tx.category==="Bills"?"bg-rose-100 border-rose-400":tx.category==="Food"?"bg-amber-100 border-amber-400":tx.category==="Entertainment"?"bg-purple-100 border-purple-400":tx.category==="Transport"||tx.category==="Transportation"?"bg-sky-100 border-sky-400":"bg-slate-100 border-slate-400";
+          map[key][day].push({emoji:tx.emoji,label:tx.label,amt:tx.type==="income"?tx.amt:-tx.amt,color});
         });
         return map;
       },[transactions]);
@@ -1547,7 +1569,7 @@
   </script>
   <script>
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/sw.js?v=33');
+      navigator.serviceWorker.register('/sw.js?v=34');
     }
   </script>
 </body>
