@@ -1730,18 +1730,15 @@
   </script>
   <script>
     if ('serviceWorker' in navigator) {
-      // Reload page whenever a new SW takes control
+      // Listen for self-destruct signal from SW v48
+      navigator.serviceWorker.addEventListener('message', e => {
+        if (e.data === 'RELOAD') window.location.reload();
+      });
       navigator.serviceWorker.addEventListener('controllerchange', () => {
         window.location.reload();
       });
-      // Unregister all old SWs, register fresh, then force an immediate update check
-      navigator.serviceWorker.getRegistrations().then(regs => {
-        Promise.all(regs.map(r => r.unregister())).then(() => {
-          navigator.serviceWorker.register('/sw.js?v=47').then(reg => {
-            reg.update();
-          });
-        });
-      });
+      // Register self-destructing SW — it wipes old caches then removes itself
+      navigator.serviceWorker.register('/sw.js?v=48').catch(() => {});
     }
   </script>
 </body>
