@@ -68,6 +68,21 @@
 </head>
 <body class="m-0 p-0">
   <div id="root"></div>
+  <script>
+  // Version gate — runs before React, forces hard reload if stale cache detected
+  (function(){
+    var V='cc-47';
+    if(localStorage.getItem('__ccv')!==V){
+      localStorage.setItem('__ccv',V);
+      if(window.caches)caches.keys().then(function(k){k.forEach(function(n){caches.delete(n)});});
+      if(navigator.serviceWorker)navigator.serviceWorker.getRegistrations().then(function(r){
+        Promise.all(r.map(function(s){return s.unregister();})).then(function(){
+          location.reload(true);
+        });
+      });
+    }
+  })();
+  </script>
   <script type="text/babel">
     const { useState, useContext, createContext, useMemo, useEffect, useRef } = React;
     const TabCtx = createContext({ tab: "home", setTab: () => {} });
