@@ -368,7 +368,7 @@
 
     // ── CalendarLive ──────────────────────────────────────
     const MON_SHORT=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-    function CalendarLive({openMenu,openCash,openInsights,openWeather,onDayTap,today="$0",balanceDisplay="$0",userName="",calendarEvents={},onScrollDir}){
+    function CalendarLive({openMenu,openCash,openInsights,openWeather,onDayTap,today="$0",balanceDisplay="$0",userName="",calendarEvents={},onScrollDir,isSyncing}){
       const dows=["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
       const now=new Date();
       const scrollRef=useRef(null);
@@ -449,7 +449,7 @@
           </div>
           <button onClick={openCash} style={{background:"#f1f5f9",borderRadius:"999px",padding:"6px 24px",textAlign:"center"}}>
             <div style={{fontSize:"20px",fontWeight:"800",color:"#111827",lineHeight:"1.1"}}>{today}</div>
-            <div style={{fontSize:"11px",color:"#64748b",fontWeight:"600",marginTop:"1px"}}>Updated 2 days ago</div>
+            <div style={{fontSize:"11px",color:isSyncing?"#3b82f6":"#64748b",fontWeight:"600",marginTop:"1px"}}>{isSyncing?"↻ Syncing…":"Updated just now"}</div>
           </button>
           <div style={{display:"flex",gap:"8px"}}>
             <button onClick={openInsights} style={{width:"44px",height:"44px",borderRadius:"50%",background:"#f1f5f9",display:"grid",placeItems:"center",color:"#6b7280"}}><BarsIcon/></button>
@@ -1280,7 +1280,13 @@
     }
     function AccountSetup({onDone}){
       const [step,setStep]=useState(0);
-      const [accts,setAccts]=useState([{icon:"🏦",name:"Checking",amt:2500,on:true},{icon:"💰",name:"Savings",amt:5000,on:true},{icon:"💵",name:"Cash",amt:200,on:false}]);
+      const [showBankList,setShowBankList]=useState(false);
+      const [bankQuery,setBankQuery]=useState("");
+      const [linkStep,setLinkStep]=useState("idle"); // idle | connecting | syncing | done
+      const [linkProgress,setLinkProgress]=useState(0);
+      const [linkMsg,setLinkMsg]=useState("");
+      const [linkedBank,setLinkedBank]=useState(null);
+      const [accts,setAccts]=useState([]);
       const [incomes,setIncomes]=useState([{icon:"🕐",label:"Hourly Job",amt:"1600",freq:"Bi-Weekly"}]);
       const next=()=>setStep(s=>s+1);
       const back=()=>setStep(s=>Math.max(0,s-1));
@@ -1288,17 +1294,117 @@
       const changeIncome=(i,field,val)=>setIncomes(p=>p.map((inc,k)=>k===i?{...inc,[field]:val}:inc));
       const removeIncome=i=>setIncomes(p=>p.filter((_,k)=>k!==i));
       const addIncome=()=>setIncomes(p=>[...p,{icon:INCOME_ICONS[p.length%INCOME_ICONS.length],label:"",amt:"",freq:"Monthly"}]);
+
+      const simulateLink=(bank)=>{
+        setShowBankList(false);setLinkedBank(bank);setLinkStep("connecting");setLinkProgress(0);
+        const msgs=["Establishing secure connection…","Verifying your identity…","Fetching accounts…","Pulling transactions…","Analyzing spending…","Detecting recurring payments…","Finalizing sync…","Done!"];
+        let p=0,mi=0;
+        setTimeout(()=>{
+          setLinkStep("syncing");
+          const iv=setInterval(()=>{
+            p+=Math.random()*13+4;
+            if(mi<msgs.length-1&&p>(mi+1)*12){setLinkMsg(msgs[++mi]);}
+            if(p>=100){
+              clearInterval(iv);setLinkProgress(100);setLinkStep("done");
+              const d=generateBankData(bank);
+              setAccts(d.accounts.map(a=>({icon:a.type==="checking"?"🏦":"💰",name:a.name,amt:a.balance,number:a.number,on:true,bankName:bank.name,bankIcon:bank.icon,bankColor:bank.color})));
+            } else setLinkProgress(Math.min(p,99));
+          },350);
+        },900);
+      };
+
+      const filteredBanks=BANKS.filter(b=>b.name.toLowerCase().includes(bankQuery.toLowerCase())||b.sub.toLowerCase().includes(bankQuery.toLowerCase()));
+      const totalSelected=accts.filter(a=>a.on).reduce((s,a)=>s+a.amt,0);
+
+      if(showBankList) return(
+        <div className="absolute inset-0 z-50 flex flex-col bg-white" style={{paddingTop:"calc(env(safe-area-inset-top,0px)+8px)"}}>
+          <div className="flex items-center gap-3 px-5 pb-3">
+            <button onClick={()=>setShowBankList(false)} className="grid h-10 w-10 place-items-center rounded-full bg-slate-100 text-slate-500 text-lg">‹</button>
+            <h1 className="text-xl font-extrabold text-slate-900">Choose Your Bank</h1>
+          </div>
+          <div className="px-5 pb-3">
+            <div className="flex items-center gap-2 rounded-2xl bg-slate-100 px-4 py-3">
+              <span className="text-slate-400">🔍</span>
+              <input value={bankQuery} onChange={e=>setBankQuery(e.target.value)} placeholder="Search banks…" className="flex-1 bg-transparent text-slate-900 outline-none placeholder:text-slate-400"/>
+            </div>
+          </div>
+          <div className="flex-1 overflow-y-auto px-5 space-y-2 pb-6">
+            {!bankQuery&&<p className="text-[11px] font-bold uppercase tracking-widest text-slate-400 pb-1">All Banks</p>}
+            {filteredBanks.map(b=>(
+              <button key={b.id} onClick={()=>simulateLink(b)} className="flex w-full items-center gap-4 rounded-2xl bg-slate-50 px-4 py-4 text-left transition active:scale-[0.98]">
+                <div className="grid h-12 w-12 flex-shrink-0 place-items-center rounded-2xl text-2xl text-white font-bold" style={{background:b.color}}>{b.icon}</div>
+                <div className="flex-1 min-w-0"><div className="font-bold text-slate-900 truncate">{b.name}</div><div className="text-xs text-slate-400 truncate">{b.sub}</div></div>
+                <span className="text-slate-300 text-lg">›</span>
+              </button>
+            ))}
+          </div>
+          <div className="px-5 py-3 border-t text-center text-xs text-slate-400">🔒 256-bit encryption · Read-only access · We never store your password</div>
+        </div>
+      );
+
       const screens=[
-        <div key="w" className="absolute inset-0 flex flex-col justify-end bg-black/30"><div className="m-4 rounded-[36px] bg-white p-8 text-center"><div className="mx-auto mb-4 grid h-20 w-20 place-items-center rounded-full bg-slate-100 text-4xl">🚀</div><h1 className="text-3xl font-extrabold">Welcome to CashCycle</h1><p className="mt-2 text-slate-500">Set up your finances in just a few minutes.</p><button onClick={next} className="mt-6 w-full rounded-2xl bg-blue-500 py-4 font-bold text-white">Next →</button></div></div>,
-        <SetupSheet key="s" title="Select Your Accounts" sub="Choose the accounts you want to track" footer={<><SetupBk onClick={back}/><SetupNx onClick={next}/></>}><div className="flex flex-wrap gap-2">{accts.map((a,i)=>(<button key={a.name} onClick={()=>toggle(i)} className={cx("rounded-full px-5 py-3 font-semibold transition",a.on?"bg-blue-500 text-white":"bg-slate-100 text-slate-600")}>{a.icon} {a.name} {money(a.amt)}</button>))}</div></SetupSheet>,
-        <SetupSheet key="ri" title="Review Your Income" sub="Add or edit your income sources" footer={<><SetupBk onClick={back}/><button onClick={onDone} className="flex-1 rounded-2xl bg-blue-500 py-4 font-bold text-white">Finish →</button></>}>
+        /* welcome */
+        <div key="w" className="absolute inset-0 flex flex-col justify-end bg-black/30">
+          <div className="m-4 rounded-[36px] bg-white p-8 text-center">
+            <div className="mx-auto mb-4 grid h-20 w-20 place-items-center rounded-full bg-blue-100 text-4xl">🏦</div>
+            <h1 className="text-3xl font-extrabold text-slate-900">Connect Your Bank</h1>
+            <p className="mt-2 text-slate-500">Link your bank to automatically track every expense and get 100% accurate balances.</p>
+            <button onClick={next} className="mt-6 w-full rounded-2xl bg-blue-500 py-4 font-bold text-white">Get Started →</button>
+          </div>
+        </div>,
+
+        /* bank link + account select */
+        <SetupSheet key="s" title="Connect Your Bank" sub="Securely link your accounts — read-only access" footer={<><SetupBk onClick={back}/><SetupNx onClick={next} disabled={accts.length===0}/></>}>
+          {linkStep==="idle"&&(
+            <button onClick={()=>{setBankQuery("");setShowBankList(true);}} className="w-full rounded-2xl border-2 border-dashed border-blue-200 bg-blue-50 p-6 text-center transition active:scale-95">
+              <div className="text-3xl mb-2">🏛️</div>
+              <div className="font-bold text-blue-600">+ Connect Your Bank Account</div>
+              <div className="text-xs mt-1 text-blue-400">Chase · PNC · Wells Fargo · BofA + 25 more</div>
+            </button>
+          )}
+          {(linkStep==="connecting"||linkStep==="syncing")&&linkedBank&&(
+            <div className="rounded-2xl bg-slate-50 p-6 text-center">
+              <div className="grid h-16 w-16 place-items-center rounded-2xl text-3xl text-white mx-auto mb-3" style={{background:linkedBank.color}}>{linkedBank.icon}</div>
+              <div className="font-bold text-slate-900 mb-1">{linkedBank.name}</div>
+              <div className="text-sm text-slate-500 mb-4">{linkStep==="connecting"?"Establishing secure connection…":linkMsg||"Syncing your data…"}</div>
+              <div className="w-full rounded-full bg-slate-200 h-2.5 overflow-hidden mb-1">
+                <div className="h-full rounded-full bg-blue-500 transition-all duration-500" style={{width:`${linkProgress}%`}}/>
+              </div>
+              <div className="text-blue-500 font-bold text-sm">{Math.round(linkProgress)}%</div>
+            </div>
+          )}
+          {linkStep==="done"&&accts.length>0&&(
+            <div className="space-y-3">
+              <div className="flex items-center gap-3 rounded-2xl px-4 py-3" style={{background:linkedBank.color}}>
+                <span className="text-2xl">{linkedBank.icon}</span>
+                <div className="flex-1"><div className="font-bold text-white">{linkedBank.name}</div><div className="text-xs text-white/80">✓ Connected — {accts.length} account{accts.length>1?"s":""} found</div></div>
+                <button onClick={()=>{setLinkStep("idle");setLinkedBank(null);setAccts([]);}} className="text-white/70 text-lg">✕</button>
+              </div>
+              <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Select accounts to include:</p>
+              {accts.map((a,i)=>(
+                <button key={i} onClick={()=>toggle(i)} className={cx("flex w-full items-center gap-4 rounded-2xl border-2 px-4 py-4 text-left transition",a.on?"border-blue-400 bg-blue-50":"border-slate-100 bg-slate-50")}>
+                  <div className={cx("grid h-10 w-10 flex-shrink-0 place-items-center rounded-xl text-lg font-bold",a.on?"bg-blue-500 text-white":"bg-slate-200 text-slate-500")}>{a.on?"✓":a.icon}</div>
+                  <div className="flex-1 min-w-0"><div className="font-bold text-slate-900 truncate">{a.name}</div><div className="text-xs text-slate-400">{a.number}</div></div>
+                  <span className={cx("font-extrabold",a.on?"text-blue-500":"text-slate-400")}>{money(a.amt)}</span>
+                </button>
+              ))}
+              <div className="rounded-2xl bg-emerald-50 px-4 py-3 flex items-center justify-between">
+                <span className="text-sm font-semibold text-emerald-700">Total Selected</span>
+                <span className="font-extrabold text-emerald-600">{money(totalSelected)}</span>
+              </div>
+            </div>
+          )}
+        </SetupSheet>,
+
+        /* income review */
+        <SetupSheet key="ri" title="Review Your Income" sub="We detected these income sources from your bank" footer={<><SetupBk onClick={back}/><button onClick={()=>onDone({accounts:accts,incomes})} className="flex-1 rounded-2xl bg-blue-500 py-4 font-bold text-white">Finish →</button></>}>
           <div className="space-y-3">
             {incomes.map((inc,i)=><IncomeRow key={i} inc={inc} idx={i} onChange={changeIncome} onRemove={removeIncome}/>)}
             <button onClick={addIncome} className="flex w-full items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-slate-200 py-4 text-sm font-semibold text-slate-400 active:bg-slate-50">+ Add Income Source</button>
           </div>
         </SetupSheet>
       ];
-      return<div className="relative h-full" style={{paddingTop:"env(safe-area-inset-top,44px)"}}>{screens[step]}</div>;
+      return<div className="relative h-full" style={{paddingTop:"env(safe-area-inset-top,44px)"}}>{screens[step]}{showBankList&&<div className="absolute inset-0 z-50" style={{paddingTop:"env(safe-area-inset-top,0px)"}}/>}</div>;
     }
     // ── BudgetWizard / NetWorthFlow / AllSet ─────────────
     function BudgetWizard({onDone,onBack}){
@@ -1432,18 +1538,47 @@
       const [goals,setGoals]=useState(sv.goals||GOALS);
       const [dockVisible,setDockVisible]=useState(true);
       const [addMenuOpen,setAddMenuOpen]=useState(false);
+      const [accounts,setAccounts]=useState(sv.accounts||[]);
+      const [isSyncing,setIsSyncing]=useState(false);
+
+      // Auto-sync simulation: re-fetch every 20 seconds when in app phase
+      useEffect(()=>{
+        if(phase!=="app")return;
+        const iv=setInterval(()=>{
+          setIsSyncing(true);
+          setTimeout(()=>setIsSyncing(false),2000);
+        },20000);
+        return()=>clearInterval(iv);
+      },[phase]);
 
       // Persist all state to localStorage on every change
       useEffect(()=>{
         try{
-          localStorage.setItem(STORE_KEY,JSON.stringify({phase,tab,dark,accent,userName,userEmail,userLang,connectedBanks,transactions,goals}));
+          localStorage.setItem(STORE_KEY,JSON.stringify({phase,tab,dark,accent,userName,userEmail,userLang,connectedBanks,transactions,goals,accounts}));
         }catch(e){}
-      },[phase,tab,dark,accent,userName,userEmail,userLang,connectedBanks,transactions,goals]);
+      },[phase,tab,dark,accent,userName,userEmail,userLang,connectedBanks,transactions,goals,accounts]);
 
       const addTransaction=tx=>setTransactions(p=>[tx,...p]);
       const onBankConnect=(bank,data)=>{
         setConnectedBanks(p=>[...p,{bank,data}]);
         setTransactions(p=>[...data.transactions.map(tx=>({...tx,id:Date.now()+Math.random()})),...p]);
+      };
+
+      const handleSetupDone=(data)=>{
+        if(data?.accounts){
+          const linked=data.accounts.filter(a=>a.on);
+          setAccounts(linked);
+          // Import bank transactions into the transaction list
+          const bank=linked[0];
+          if(bank?.bankName){
+            const matchedBank=BANKS.find(b=>b.name===bank.bankName);
+            if(matchedBank){
+              const d=generateBankData(matchedBank);
+              setTransactions(p=>[...d.transactions.map(tx=>({...tx,id:Date.now()+Math.random()})),...p]);
+            }
+          }
+        }
+        setPhase("app");
       };
 
       // ── Derived computed state ──────────────────────────
@@ -1497,9 +1632,10 @@
       },[transactions]);
 
       const totalBalance=useMemo(()=>{
+        if(accounts.length>0) return accounts.filter(a=>a.on).reduce((s,a)=>s+a.amt,0);
         const bankBal=connectedBanks.reduce((s,cb)=>s+cb.data.accounts.reduce((a,acc)=>a+acc.balance,0),0);
         return 7500+bankBal;
-      },[connectedBanks]);
+      },[accounts,connectedBanks]);
       const balanceDisplay=totalBalance>=1000?`$${(totalBalance/1000).toFixed(1)}k`:money(totalBalance);
 
       const go=dest=>{setMenuOpen(false);setDockVisible(true);setTab(dest);};
@@ -1511,6 +1647,7 @@
         setDark(false);setAccent("#3b82f6");
       };
       const cp={
+        isSyncing,
         openMenu:()=>setMenuOpen(true),
         openCash:()=>setOverlay("cash"),
         openInsights:()=>setOverlay("insights"),
@@ -1524,7 +1661,7 @@
           {!booted?<SplashScreen onDone={()=>setBooted(true)}/>:(
             <>
               {phase==="onboarding"&&<Onboarding onDone={({name,lang})=>{setUserName(name);setUserLang(lang);setPhase("setup");}}/>}
-              {phase==="setup"&&<AccountSetup onDone={()=>setPhase("budgetWizard")}/>}
+              {phase==="setup"&&<AccountSetup onDone={handleSetupDone}/>}
               {phase==="budgetWizard"&&<BudgetWizard onBack={()=>setPhase("setup")} onDone={()=>setPhase("netWorth")}/>}
               {phase==="netWorth"&&<NetWorthFlow onBack={()=>setPhase("budgetWizard")} onDone={()=>setPhase("allSet")}/>}
               {phase==="allSet"&&<AllSet onDone={()=>setPhase("app")}/>}
@@ -1566,7 +1703,7 @@
   </script>
   <script>
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/sw.js?v=42');
+      navigator.serviceWorker.register('/sw.js?v=43');
     }
   </script>
 </body>
