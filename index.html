@@ -1539,9 +1539,13 @@
                     {tab==="goals"&&<Goals {...cp} goals={goals} setGoals={setGoals}/>}
                     {tab==="profile"&&<Profile openMenu={cp.openMenu} openAdd={cp.openAdd} connectedBanks={connectedBanks} onBankConnect={onBankConnect} userName={userName} setUserName={setUserName} userEmail={userEmail} setUserEmail={setUserEmail}/>}
                     {tab==="settings"&&<Settings openMenu={cp.openMenu} dark={dark} setDark={setDark} accent={accent} setAccent={setAccent} resetApp={resetApp} userLang={userLang} setUserLang={setUserLang}/>}
-                    {overlay==="insights"&&<SwipeClose onClose={()=>setOverlay(null)} className="absolute inset-0 z-30 bg-white"><Insights onClose={()=>setOverlay(null)}/></SwipeClose>}
-                    {overlay==="cash"&&<SwipeClose onClose={()=>setOverlay(null)} className="absolute inset-0 z-30 bg-white"><CashBalance onClose={()=>setOverlay(null)} connectedBanks={connectedBanks} totalBalance={totalBalance} transactions={transactions}/></SwipeClose>}
-                    {overlay==="weather"&&<SwipeClose onClose={()=>setOverlay(null)} className="absolute inset-0 z-30 bg-white"><WeatherWarnings onClose={()=>setOverlay(null)}/></SwipeClose>}
+                    {(overlay==="insights"||overlay==="cash"||overlay==="weather")&&(
+                      <div className={cx("absolute inset-0 z-30 transition-colors",dark?"bg-slate-900":"bg-white")}>
+                        {overlay==="insights"&&<Insights onClose={()=>setOverlay(null)}/>}
+                        {overlay==="cash"&&<CashBalance onClose={()=>setOverlay(null)} connectedBanks={connectedBanks} totalBalance={totalBalance} transactions={transactions}/>}
+                        {overlay==="weather"&&<WeatherWarnings onClose={()=>setOverlay(null)}/>}
+                      </div>
+                    )}
                     {(overlay==="add"||overlay==="expense"||overlay==="income")&&<SwipeClose onClose={()=>setOverlay(null)} className="absolute inset-0 z-30"><AddTransaction initialType={overlay==="income"?"income":"expense"} onClose={()=>setOverlay(null)} onAdd={addTransaction}/></SwipeClose>}
                     {overlay==="goal_quick"&&<SwipeClose onClose={()=>setOverlay(null)} className="absolute inset-0 z-30"><AddGoalSheet onSave={g=>{setGoals(p=>[...p,g]);setOverlay(null);}} onClose={()=>setOverlay(null)}/></SwipeClose>}
                     {addMenuOpen&&<QuickAddMenu onClose={()=>setAddMenuOpen(false)} onExpense={()=>{setAddMenuOpen(false);setOverlay("expense");}} onIncome={()=>{setAddMenuOpen(false);setOverlay("income");}} onGoal={()=>{setAddMenuOpen(false);setOverlay("goal_quick");}}/>}
@@ -1562,7 +1566,7 @@
   </script>
   <script>
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/sw.js?v=37');
+      navigator.serviceWorker.register('/sw.js?v=38');
     }
   </script>
 </body>
