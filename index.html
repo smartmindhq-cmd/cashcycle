@@ -71,7 +71,7 @@
   <script>
   // Version gate — runs before React, forces hard reload if stale cache detected
   (function(){
-    var V='cc-55';
+    var V='cc-56';
     if(localStorage.getItem('__ccv')!==V){
       localStorage.setItem('__ccv',V);
       if(window.caches)caches.keys().then(function(k){k.forEach(function(n){caches.delete(n)});});
@@ -1014,7 +1014,7 @@
       };
 
       if(step==="search") return(
-        <div className="absolute inset-0 z-50 bg-white flex flex-col" style={{paddingTop:"calc(env(safe-area-inset-top,60px)+12px)"}}>
+        <div className="fixed inset-0 z-50 bg-white flex flex-col" style={{paddingTop:"calc(env(safe-area-inset-top,60px)+12px)"}}>
           <div className="flex items-center gap-3 px-5 pb-4">
             <button onClick={onClose} className="grid h-10 w-10 place-items-center rounded-full bg-slate-100 text-slate-500 text-xl">✕</button>
             <h1 className="text-xl font-extrabold text-slate-900">Link a Bank</h1>
@@ -1043,7 +1043,7 @@
       );
 
       if(step==="credentials") return(
-        <div className="absolute inset-0 z-50 bg-white flex flex-col" style={{paddingTop:"calc(env(safe-area-inset-top,60px)+12px)"}}>
+        <div className="fixed inset-0 z-50 bg-white flex flex-col" style={{paddingTop:"calc(env(safe-area-inset-top,60px)+12px)"}}>
           <div className="flex items-center gap-3 px-5 pb-6">
             <button onClick={()=>setStep("search")} className="grid h-10 w-10 place-items-center rounded-full bg-slate-100 text-slate-500 text-xl">‹</button>
             <h1 className="text-xl font-extrabold text-slate-900">Sign In</h1>
@@ -1076,7 +1076,7 @@
       );
 
       if(step==="syncing") return(
-        <div className="absolute inset-0 z-50 bg-white flex flex-col items-center justify-center px-8 text-center">
+        <div className="fixed inset-0 z-50 bg-white flex flex-col items-center justify-center px-8 text-center">
           <div className="grid h-24 w-24 place-items-center rounded-3xl text-5xl text-white shadow-xl mb-8" style={{background:bank.color}}>{bank.icon}</div>
           <h2 className="text-2xl font-extrabold text-slate-900 mb-2">Syncing {bank.name}</h2>
           <p className="text-slate-500 mb-8 text-sm">{syncMsg}</p>
@@ -1095,7 +1095,7 @@
       );
 
       if(step==="success"&&syncedData) return(
-        <div className="absolute inset-0 z-50 bg-white flex flex-col" style={{paddingTop:"calc(env(safe-area-inset-top,60px)+12px)"}}>
+        <div className="fixed inset-0 z-50 bg-white flex flex-col" style={{paddingTop:"calc(env(safe-area-inset-top,60px)+12px)"}}>
           <div className="px-5 pb-4">
             <div className="flex items-center gap-3 mb-6">
               <div className="grid h-14 w-14 place-items-center rounded-2xl text-3xl text-white" style={{background:bank.color}}>{bank.icon}</div>
@@ -1339,7 +1339,7 @@
       const totalSelected=accts.filter(a=>a.on).reduce((s,a)=>s+a.amt,0);
 
       if(showBankList) return(
-        <div className="absolute inset-0 z-50 flex flex-col bg-white" style={{paddingTop:"calc(env(safe-area-inset-top,60px)+12px)"}}>
+        <div className="fixed inset-0 z-50 flex flex-col bg-white" style={{paddingTop:"calc(env(safe-area-inset-top,60px)+12px)"}}>
           <div className="flex items-center gap-3 px-5 pb-3">
             <button onClick={()=>setShowBankList(false)} className="grid h-10 w-10 place-items-center rounded-full bg-slate-100 text-slate-500 text-lg">‹</button>
             <h1 className="text-xl font-extrabold text-slate-900">Choose Your Bank</h1>
@@ -1715,12 +1715,13 @@
                     {overlay==="updates"&&<SwipeClose onClose={()=>setOverlay(null)} className="absolute inset-0 z-40"><UpdatesSheet onClose={()=>setOverlay(null)}/></SwipeClose>}
                     <SideMenu open={menuOpen} onClose={()=>setMenuOpen(false)} go={go} dark={dark} setDark={setDark} onCheckUpdate={()=>showToast("You're on the latest version ✓")}/>
                     {toast&&<div className="absolute bottom-4 left-1/2 z-50 -translate-x-1/2 whitespace-nowrap rounded-full bg-slate-900 px-5 py-3 text-sm font-semibold text-white shadow-xl">{toast}</div>}
-                    {bankLinkOpen&&<BankLinkFlow onClose={()=>setBankLinkOpen(false)} onConnect={(bank,data)=>{onBankConnect(bank,data);setBankLinkOpen(false);showToast(`${bank.name} connected ✓`);}}/>}
                   </div>
                   {/* Dock is a real flex footer — no fixed positioning, no gap */}
                   <DockNav onAdd={()=>setAddMenuOpen(p=>!p)} addOpen={addMenuOpen} onInsights={()=>setOverlay("insights")}/>
                 </TabCtx.Provider>
               )}
+              {/* BankLinkFlow: fixed full-screen so it covers dock and everything */}
+              {bankLinkOpen&&<BankLinkFlow onClose={()=>setBankLinkOpen(false)} onConnect={(bank,data)=>{onBankConnect(bank,data);setBankLinkOpen(false);showToast(`${bank.name} connected ✓`);}}/>}
             </>
           )}
         </div>
