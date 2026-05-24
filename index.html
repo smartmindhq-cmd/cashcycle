@@ -71,7 +71,7 @@
   <script>
   // Version gate — runs before React, forces hard reload if stale cache detected
   (function(){
-    var V='cc-47';
+    var V='cc-52';
     if(localStorage.getItem('__ccv')!==V){
       localStorage.setItem('__ccv',V);
       if(window.caches)caches.keys().then(function(k){k.forEach(function(n){caches.delete(n)});});
@@ -1730,7 +1730,7 @@
   </script>
   <script>
     if ('serviceWorker' in navigator) {
-      // Listen for self-destruct signal from SW v48
+      // Listen for self-destruct signal from SW
       navigator.serviceWorker.addEventListener('message', e => {
         if (e.data === 'RELOAD') window.location.reload();
       });
@@ -1738,7 +1738,7 @@
         window.location.reload();
       });
       // Register self-destructing SW — it wipes old caches then removes itself
-      navigator.serviceWorker.register('/sw.js?v=48').catch(() => {});
+      navigator.serviceWorker.register('/sw.js?v=49').catch(() => {});
     }
   </script>
 </body>
