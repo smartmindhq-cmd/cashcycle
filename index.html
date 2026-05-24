@@ -219,19 +219,22 @@
     }
     function SummaryCard({title,total,rows}){return(<div className="mb-4 rounded-2xl bg-slate-50 p-4 text-slate-900"><div className="flex items-center justify-between font-bold"><span>{title}</span><span>{total}</span></div><div className="mt-2 divide-y">{rows.map(([l,v])=>(<div key={l} className="flex items-center justify-between py-2 text-slate-600"><span>{l}</span><span className="font-semibold text-slate-700">{v}</span></div>))}</div></div>);}
 
-    function TopBar({today="$0",openMenu,openCash,openInsights,openWeather}){
-      return(<div className="flex items-center justify-between px-3 pb-1" style={{paddingTop:"calc(env(safe-area-inset-top,0px) + 10px)"}}>
-        <div className="flex gap-1.5">
-          <button onClick={openMenu} className="grid h-10 w-10 place-items-center rounded-full bg-slate-100 text-slate-900 transition active:scale-90"><MenuIcon/></button>
-          <div className="grid h-10 w-10 place-items-center rounded-full bg-slate-100 text-slate-500"><ChatIcon/></div>
+    function TopBar({today="$0",openMenu,openCash,openInsights,openWeather,isSyncing}){
+      return(<div className="flex items-center justify-between px-4 pb-2" style={{paddingTop:"calc(env(safe-area-inset-top,0px) + 10px)"}}>
+        <div className="flex gap-2">
+          <button onClick={openMenu} className="grid h-11 w-11 place-items-center rounded-full bg-slate-100 text-xl transition active:scale-90">≡</button>
+          <div className="grid h-11 w-11 place-items-center rounded-full bg-slate-100 text-lg">💬</div>
         </div>
-        <button onClick={openCash} className="rounded-full bg-slate-100 px-4 py-1 text-center text-slate-900 transition active:scale-95">
-          <div className="text-base font-extrabold leading-none">{today}</div>
-          <div className="text-[10px] font-semibold text-slate-500">tap for breakdown</div>
+        <button onClick={openCash} className="rounded-full bg-slate-100 px-6 py-1.5 text-center transition active:scale-95">
+          <div className="text-lg font-extrabold leading-none">{today}</div>
+          <div className="flex items-center justify-center gap-1 text-[11px] font-semibold text-slate-500">
+            {isSyncing?"Syncing":"Today"}
+            {isSyncing&&<span className="inline-block animate-spin" style={{fontSize:"10px"}}>↻</span>}
+          </div>
         </button>
-        <div className="flex gap-1.5">
-          <button onClick={openInsights} className="grid h-10 w-10 place-items-center rounded-full bg-slate-100 text-slate-500 transition active:scale-90"><BarsIcon/></button>
-          <button onClick={openWeather} className="grid h-10 w-10 place-items-center rounded-full bg-slate-100 text-slate-400 transition active:scale-90"><TrophyIcon/></button>
+        <div className="flex gap-2">
+          <button onClick={openInsights} className="grid h-11 w-11 place-items-center rounded-full bg-slate-100 text-slate-500 transition active:scale-90"><BarsIcon/></button>
+          <button onClick={openWeather} className="grid h-11 w-11 place-items-center rounded-full bg-slate-100 text-slate-400 transition active:scale-90"><TrophyIcon/></button>
         </div>
       </div>);
     }
@@ -660,7 +663,7 @@
         </div>
       </Sheet2>);
     }
-    function Budget({openMenu,openCash,openInsights,openWeather,openAdd,liveCategories,today="$0"}){
+    function Budget({openMenu,openCash,openInsights,openWeather,openAdd,liveCategories,today="$0",isSyncing}){
       const [cats,setCats]=useState(()=>liveCategories||CATEGORIES);
       useEffect(()=>{
         if(!liveCategories)return;
@@ -669,7 +672,7 @@
       const [editing,setEditing]=useState(null);
       const save=(name,planned)=>{setCats(p=>p.map(c=>c.name===name?{...c,planned,pct:Math.round((c.used/planned)*100)}:c));setEditing(null);};
       return(<div className="flex h-full flex-col">
-        <TopBar today={today} openMenu={openMenu} openCash={openCash} openInsights={openInsights} openWeather={openWeather}/>
+        <TopBar today={today} isSyncing={isSyncing} openMenu={openMenu} openCash={openCash} openInsights={openInsights} openWeather={openWeather}/>
         <div className="flex-1 overflow-y-auto px-4" style={{paddingBottom:"calc(env(safe-area-inset-bottom,0px) + 88px)"}}>
           <div className="flex items-center justify-between py-4"><h1 className="text-2xl font-extrabold text-slate-900">Budget</h1></div>
           {cats.map(c=>(<button key={c.name} onClick={()=>setEditing(c)} className="mb-3 w-full rounded-2xl bg-slate-50 p-4 text-left">
@@ -713,13 +716,13 @@
         </div>
       </Sheet2>);
     }
-    function Debt({openMenu,openCash,openInsights,openWeather,openAdd,today="$0"}){
+    function Debt({openMenu,openCash,openInsights,openWeather,openAdd,today="$0",isSyncing}){
       const [debts,setDebts]=useState(DEBTS);
       const [editing,setEditing]=useState(null);
       const [adding,setAdding]=useState(false);
       const makePayment=(name,pmt)=>{setDebts(p=>p.map(d=>{if(d.name!==name)return d;const paid=Math.min(d.paid+pmt,d.total);return{...d,paid,pct:Math.round((paid/d.total)*100)};}));setEditing(null);};
       return(<div className="flex h-full flex-col">
-        <TopBar today={today} openMenu={openMenu} openCash={openCash} openInsights={openInsights} openWeather={openWeather}/>
+        <TopBar today={today} isSyncing={isSyncing} openMenu={openMenu} openCash={openCash} openInsights={openInsights} openWeather={openWeather}/>
         <div className="flex-1 overflow-y-auto px-4" style={{paddingBottom:"calc(env(safe-area-inset-bottom,0px) + 88px)"}}>
           <div className="flex items-center justify-between py-4"><h1 className="text-2xl font-extrabold text-slate-900">Debts</h1><button onClick={()=>setAdding(true)} className="grid h-9 w-9 place-items-center rounded-full bg-blue-500 text-white text-xl">+</button></div>
           {debts.length===0&&<div className="flex flex-col items-center py-16 text-slate-400"><div className="text-5xl mb-3">🎉</div><p className="font-semibold">Debt free!</p></div>}
@@ -765,12 +768,12 @@
         </div>
       </Sheet2>);
     }
-    function Goals({openMenu,openCash,openInsights,openWeather,openAdd,today="$0",goals,setGoals}){
+    function Goals({openMenu,openCash,openInsights,openWeather,openAdd,today="$0",isSyncing,goals,setGoals}){
       const [editing,setEditing]=useState(null);
       const [adding,setAdding]=useState(false);
       const contribute=(name,amt)=>{setGoals(p=>p.map(g=>{if(g.name!==name)return g;const have=Math.min(g.have+amt,g.target);return{...g,have,pct:Math.round((have/g.target)*100)};}));setEditing(null);};
       return(<div className="flex h-full flex-col">
-        <TopBar today={today} openMenu={openMenu} openCash={openCash} openInsights={openInsights} openWeather={openWeather}/>
+        <TopBar today={today} isSyncing={isSyncing} openMenu={openMenu} openCash={openCash} openInsights={openInsights} openWeather={openWeather}/>
         <div className="flex-1 overflow-y-auto px-4" style={{paddingBottom:"calc(env(safe-area-inset-bottom,0px) + 88px)"}}>
           <div className="flex items-center justify-between py-4"><h1 className="text-2xl font-extrabold text-slate-900">Goals</h1><button onClick={()=>setAdding(true)} className="grid h-9 w-9 place-items-center rounded-full bg-blue-500 text-white text-xl">+</button></div>
           {goals.map(g=>(<button key={g.name} onClick={()=>setEditing(g)} className="mb-3 w-full rounded-2xl bg-slate-50 p-4 text-left">
@@ -1706,7 +1709,7 @@
   </script>
   <script>
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/sw.js?v=44');
+      navigator.serviceWorker.register('/sw.js?v=45');
     }
   </script>
 </body>
