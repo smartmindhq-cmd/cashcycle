@@ -1,4 +1,4 @@
-const CACHE = "forecast-v39";
+const CACHE = "forecast-v40";
 const ASSETS = ["/", "/index.html", "/icon-180.png", "/icon-192.png", "/icon-512.png", "/manifest.json"];
 
 self.addEventListener("install", e => {
