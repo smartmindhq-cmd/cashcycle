@@ -444,16 +444,19 @@
         {/* TOP BAR */}
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"0 14px 6px",paddingTop:"calc(env(safe-area-inset-top,0px) + 10px)"}}>
           <div style={{display:"flex",gap:"8px"}}>
-            <button onClick={openMenu} style={{width:"44px",height:"44px",borderRadius:"50%",background:"#f1f5f9",display:"grid",placeItems:"center"}}><MenuIcon/></button>
-            <div style={{width:"44px",height:"44px",borderRadius:"50%",background:"#f1f5f9",display:"grid",placeItems:"center",color:"#6b7280"}}><ChatIcon/></div>
+            <button onClick={openMenu} className="grid h-11 w-11 place-items-center rounded-full bg-slate-100 text-xl transition active:scale-90">≡</button>
+            <div className="grid h-11 w-11 place-items-center rounded-full bg-slate-100 text-lg">💬</div>
           </div>
-          <button onClick={openCash} style={{background:"#f1f5f9",borderRadius:"999px",padding:"6px 24px",textAlign:"center"}}>
-            <div style={{fontSize:"20px",fontWeight:"800",color:"#111827",lineHeight:"1.1"}}>{today}</div>
-            <div style={{fontSize:"11px",color:isSyncing?"#3b82f6":"#64748b",fontWeight:"600",marginTop:"1px"}}>{isSyncing?"↻ Syncing…":"Updated just now"}</div>
+          <button onClick={openCash} className="rounded-full bg-slate-100 px-6 py-1.5 text-center transition active:scale-95">
+            <div className="text-lg font-extrabold leading-none">{today}</div>
+            <div className="flex items-center justify-center gap-1 text-[11px] font-semibold text-slate-500">
+              {isSyncing?"Syncing":"Today"}
+              {isSyncing&&<span className="inline-block animate-spin" style={{fontSize:"10px"}}>↻</span>}
+            </div>
           </button>
           <div style={{display:"flex",gap:"8px"}}>
-            <button onClick={openInsights} style={{width:"44px",height:"44px",borderRadius:"50%",background:"#f1f5f9",display:"grid",placeItems:"center",color:"#6b7280"}}><BarsIcon/></button>
-            <div style={{width:"44px",height:"44px",borderRadius:"50%",background:"#f1f5f9",display:"grid",placeItems:"center",color:"#94a3b8"}}><TrophyIcon/></div>
+            <button onClick={openInsights} className="grid h-11 w-11 place-items-center rounded-full bg-slate-100"><BarsIcon/></button>
+            <div className="grid h-11 w-11 place-items-center rounded-full bg-slate-100 text-slate-400"><TrophyIcon/></div>
           </div>
         </div>
 
@@ -1703,7 +1706,7 @@
   </script>
   <script>
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/sw.js?v=43');
+      navigator.serviceWorker.register('/sw.js?v=44');
     }
   </script>
 </body>
