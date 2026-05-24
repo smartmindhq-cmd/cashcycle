@@ -272,17 +272,15 @@
     function DockBtn({active,onClick,label,children}){return<button onClick={onClick} aria-label={label} className={cx("grid h-12 w-12 place-items-center rounded-full transition active:scale-90",active?"text-[#5b7cfa]":"text-slate-800")}>{children}</button>;}
     function DockNav({onAdd,addOpen,onInsights}){
       const {tab,setTab}=useContext(TabCtx);
-      const items=[["home","📅"],["insights","◔"],["add","+"],["debt","⊞"],["goals","💳"]];
       return(
-        <div style={{flexShrink:0,display:"flex",alignItems:"center",justifyContent:"space-around",padding:"10px 16px",paddingBottom:"max(env(safe-area-inset-bottom,20px),20px)",background:"#fff",borderTop:"1px solid #f1f5f9"}}>
-          {items.map(([k,ic])=>k==="add"?(
-            <button key="add" onClick={onAdd} style={{width:"52px",height:"52px",borderRadius:"50%",background:"#3b82f6",color:"#fff",fontSize:"26px",fontWeight:"300",display:"grid",placeItems:"center",boxShadow:"0 4px 16px rgba(59,130,246,0.35)",transform:addOpen?"rotate(45deg)":"rotate(0deg)",transition:"transform 0.25s cubic-bezier(0.34,1.56,0.64,1)"}}>{ic}</button>
-          ):(
-            <button key={k} onClick={()=>k==="insights"?onInsights?.():setTab(k)} style={{display:"flex",flexDirection:"column",alignItems:"center",gap:"2px",background:"transparent",padding:"4px 10px",minWidth:"40px"}}>
-              <span style={{fontSize:"22px",lineHeight:"1"}}>{ic}</span>
-              <span style={{fontSize:"9px",fontWeight:"700",color:tab===k?"#3b82f6":"#94a3b8",textTransform:"uppercase",letterSpacing:"0.04em"}}>{k}</span>
-            </button>
-          ))}
+        <div style={{flexShrink:0,display:"flex",justifyContent:"center",alignItems:"center",background:"#fff",paddingTop:"8px",paddingBottom:"max(env(safe-area-inset-bottom,12px),12px)"}}>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",borderRadius:"999px",background:"#fff",boxShadow:"0 4px 24px rgba(0,0,0,0.13)",border:"1px solid rgba(0,0,0,0.06)",padding:"6px 16px",width:"90%",maxWidth:"370px"}}>
+            <DockBtn label="calendar" active={tab==="home"} onClick={()=>setTab("home")}><CalendarIcon/></DockBtn>
+            <DockBtn label="insights" active={false} onClick={()=>onInsights?.()}><ClockIcon/></DockBtn>
+            <button onClick={onAdd} className="mx-1 grid h-14 w-14 place-items-center rounded-full bg-[#3b82f6] text-white shadow-lg active:scale-90" style={{transition:"transform 0.25s cubic-bezier(0.34,1.56,0.64,1)",transform:addOpen?"rotate(45deg)":"rotate(0deg)",flexShrink:0}}><PlusIcon/></button>
+            <DockBtn label="debt" active={tab==="debt"} onClick={()=>setTab("debt")}><GridIcon/></DockBtn>
+            <DockBtn label="goals" active={tab==="goals"} onClick={()=>setTab("goals")}><CardIcon/></DockBtn>
+          </div>
         </div>
       );
     }
@@ -1569,7 +1567,7 @@
   </script>
   <script>
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/sw.js?v=39');
+      navigator.serviceWorker.register('/sw.js?v=40');
     }
   </script>
 </body>
