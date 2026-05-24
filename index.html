@@ -1715,10 +1715,16 @@
   </script>
   <script>
     if ('serviceWorker' in navigator) {
-      // Unregister ALL old service workers first, then register fresh
+      // Reload page whenever a new SW takes control
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        window.location.reload();
+      });
+      // Unregister all old SWs, register fresh, then force an immediate update check
       navigator.serviceWorker.getRegistrations().then(regs => {
         Promise.all(regs.map(r => r.unregister())).then(() => {
-          navigator.serviceWorker.register('/sw.js?v=47');
+          navigator.serviceWorker.register('/sw.js?v=47').then(reg => {
+            reg.update();
+          });
         });
       });
     }
