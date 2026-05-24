@@ -1718,7 +1718,7 @@
       // Unregister ALL old service workers first, then register fresh
       navigator.serviceWorker.getRegistrations().then(regs => {
         Promise.all(regs.map(r => r.unregister())).then(() => {
-          navigator.serviceWorker.register('/sw.js?v=46');
+          navigator.serviceWorker.register('/sw.js?v=47');
         });
       });
     }
