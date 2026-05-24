@@ -1121,9 +1121,8 @@
     }
 
     // ── Profile ───────────────────────────────────────────
-    function Profile({openMenu,openAdd,connectedBanks=[],onBankConnect,userName="",setUserName,userEmail="",setUserEmail}){
+    function Profile({openMenu,openAdd,openBankLink,connectedBanks=[],onBankConnect,userName="",setUserName,userEmail="",setUserEmail}){
       const [editing,setEditing]=useState(false);
-      const [linking,setLinking]=useState(false);
       const [tmpName,setTmpName]=useState(userName);
       const [tmpEmail,setTmpEmail]=useState(userEmail);
       const name=userName||"You";
@@ -1168,7 +1167,7 @@
               ))}
             </div>
           )}
-          <button onClick={()=>setLinking(true)} className="mt-3 w-full rounded-2xl border-2 border-dashed border-blue-200 bg-blue-50 p-5 text-center transition active:scale-[0.98]">
+          <button onClick={openBankLink} className="mt-3 w-full rounded-2xl border-2 border-dashed border-blue-200 bg-blue-50 p-5 text-center transition active:scale-[0.98]">
             <div className="text-3xl mb-1">🏛️</div>
             <p className="font-bold text-blue-600">{connectedBanks.length>0?"+ Link Another Bank":"+ Connect a Bank"}</p>
             <p className="text-xs mt-1 text-blue-400">Chase · PNC · Wells Fargo · BofA + 25 more</p>
@@ -1180,7 +1179,6 @@
             <div><label className="text-xs font-bold uppercase tracking-wider text-slate-400">Email</label><input value={tmpEmail} onChange={e=>setTmpEmail(e.target.value)} className="mt-1 w-full rounded-2xl border border-slate-200 px-4 py-3 text-slate-900 outline-none focus:border-blue-400"/></div>
           </div>
         </Sheet2>)}
-        {linking&&<BankLinkFlow onClose={()=>setLinking(false)} onConnect={(bank,data)=>{onBankConnect?.(bank,data);setLinking(false);}}/>}
       </div>);
     }
 
@@ -1550,6 +1548,7 @@
       const [addMenuOpen,setAddMenuOpen]=useState(false);
       const [accounts,setAccounts]=useState(sv.accounts||[]);
       const [isSyncing,setIsSyncing]=useState(false);
+      const [bankLinkOpen,setBankLinkOpen]=useState(false);
 
       // Auto-sync simulation: re-fetch every 20 seconds when in app phase
       useEffect(()=>{
@@ -1663,8 +1662,10 @@
         openInsights:()=>setOverlay("insights"),
         openWeather:()=>setOverlay("weather"),
         openAdd:()=>setOverlay("add"),
+        openBankLink:()=>setBankLinkOpen(true),
         transactions,addTransaction,
         today:balanceDisplay,balanceDisplay,calendarEvents,liveCategories,userName,
+        connectedBanks,totalBalance,
       };
       return(
         <div style={{position:"fixed",top:0,left:0,right:0,bottom:0,display:"flex",flexDirection:"column",background:"#fff"}}>
@@ -1684,7 +1685,7 @@
                     {tab==="budget"&&<Budget {...cp}/>}
                     {tab==="debt"&&<Debt {...cp}/>}
                     {tab==="goals"&&<Goals {...cp} goals={goals} setGoals={setGoals}/>}
-                    {tab==="profile"&&<Profile openMenu={cp.openMenu} openAdd={cp.openAdd} connectedBanks={connectedBanks} onBankConnect={onBankConnect} userName={userName} setUserName={setUserName} userEmail={userEmail} setUserEmail={setUserEmail}/>}
+                    {tab==="profile"&&<Profile openMenu={cp.openMenu} openAdd={cp.openAdd} openBankLink={cp.openBankLink} connectedBanks={connectedBanks} onBankConnect={onBankConnect} userName={userName} setUserName={setUserName} userEmail={userEmail} setUserEmail={setUserEmail}/>}
                     {tab==="settings"&&<Settings openMenu={cp.openMenu} dark={dark} setDark={setDark} accent={accent} setAccent={setAccent} resetApp={resetApp} userLang={userLang} setUserLang={setUserLang}/>}
                     {(overlay==="insights"||overlay==="cash"||overlay==="weather")&&(
                       <div className={cx("absolute inset-0 z-30 transition-colors",dark?"bg-slate-900":"bg-white")}>
@@ -1699,6 +1700,7 @@
                     {overlay==="updates"&&<SwipeClose onClose={()=>setOverlay(null)} className="absolute inset-0 z-40"><UpdatesSheet onClose={()=>setOverlay(null)}/></SwipeClose>}
                     <SideMenu open={menuOpen} onClose={()=>setMenuOpen(false)} go={go} dark={dark} setDark={setDark} onCheckUpdate={()=>showToast("You're on the latest version ✓")}/>
                     {toast&&<div className="absolute bottom-4 left-1/2 z-50 -translate-x-1/2 whitespace-nowrap rounded-full bg-slate-900 px-5 py-3 text-sm font-semibold text-white shadow-xl">{toast}</div>}
+                    {bankLinkOpen&&<BankLinkFlow onClose={()=>setBankLinkOpen(false)} onConnect={(bank,data)=>{onBankConnect(bank,data);setBankLinkOpen(false);showToast(`${bank.name} connected ✓`);}}/>}
                   </div>
                   {/* Dock is a real flex footer — no fixed positioning, no gap */}
                   <DockNav onAdd={()=>setAddMenuOpen(p=>!p)} addOpen={addMenuOpen} onInsights={()=>setOverlay("insights")}/>
@@ -1713,12 +1715,12 @@
   </script>
   <script>
     if ('serviceWorker' in navigator) {
+      // Unregister ALL old service workers first, then register fresh
       navigator.serviceWorker.getRegistrations().then(regs => {
-        regs.forEach(r => {
-          if (!r.active?.scriptURL?.includes('v45')) r.unregister();
+        Promise.all(regs.map(r => r.unregister())).then(() => {
+          navigator.serviceWorker.register('/sw.js?v=46');
         });
       });
-      navigator.serviceWorker.register('/sw.js?v=45');
     }
   </script>
 </body>
