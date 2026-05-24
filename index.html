@@ -3,6 +3,9 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <meta http-equiv="Pragma" content="no-cache" />
+  <meta http-equiv="Expires" content="0" />
   <title>CashCycle</title>
 
   <!-- PWA manifest -->
@@ -1459,6 +1462,7 @@
         <div className={cx("z-[9999] transition-opacity duration-500",leaving?"opacity-0 pointer-events-none":"opacity-100")} style={{position:"fixed",top:0,left:0,right:0,bottom:0,background:"#2ecc5f",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center"}}>
           <span className={cx("text-8xl transition-all duration-700 ease-out",entered?"translate-y-0 opacity-100":"translate-y-8 opacity-0")}>☀️</span>
           <span className={cx("mt-4 text-2xl font-extrabold text-white tracking-tight transition-all duration-700 delay-100",entered?"opacity-100":"opacity-0")}>CashCycle</span>
+          <span className={cx("mt-2 text-xs font-semibold text-white/60 transition-all duration-700 delay-150",entered?"opacity-100":"opacity-0")}>v45</span>
         </div>
       );
     }
@@ -1709,6 +1713,11 @@
   </script>
   <script>
     if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.getRegistrations().then(regs => {
+        regs.forEach(r => {
+          if (!r.active?.scriptURL?.includes('v45')) r.unregister();
+        });
+      });
       navigator.serviceWorker.register('/sw.js?v=45');
     }
   </script>
