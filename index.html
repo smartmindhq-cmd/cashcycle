@@ -1121,7 +1121,7 @@
       const email=userEmail;
       const initials=(userName||"?").split(" ").map(w=>w[0]).join("").toUpperCase().slice(0,2);
       const totalBalance=connectedBanks.reduce((s,cb)=>s+cb.data.accounts.reduce((a,acc)=>a+acc.balance,0),7500);
-      return(<div className="flex h-full flex-col">
+      return(<div className="flex h-full flex-col" style={{position:"relative"}}>
         <div className="flex items-center justify-between px-5" style={{paddingTop:"calc(env(safe-area-inset-top,0px)+8px)"}}>
           <button onClick={openMenu} className="grid h-11 w-11 place-items-center rounded-full bg-slate-100 text-xl">≡</button>
           <h1 className="text-xl font-extrabold text-slate-900">Profile</h1>
@@ -1159,12 +1159,11 @@
               ))}
             </div>
           )}
-          <div className="mt-3 rounded-2xl border-2 border-dashed border-slate-200 p-5 text-center text-slate-400">
-            <div className="text-3xl mb-2">🏛️</div>
-            <p className="font-semibold">{connectedBanks.length>0?"Link another bank":"Connect a bank"}</p>
-            <p className="text-sm mt-1">Sync balances &amp; transactions automatically</p>
-            <button onClick={()=>setLinking(true)} className="mt-3 rounded-full bg-blue-500 px-6 py-2 text-sm font-bold text-white active:scale-95 transition">+ Connect</button>
-          </div>
+          <button onClick={()=>setLinking(true)} className="mt-3 w-full rounded-2xl border-2 border-dashed border-blue-200 bg-blue-50 p-5 text-center transition active:scale-[0.98]">
+            <div className="text-3xl mb-1">🏛️</div>
+            <p className="font-bold text-blue-600">{connectedBanks.length>0?"+ Link Another Bank":"+ Connect a Bank"}</p>
+            <p className="text-xs mt-1 text-blue-400">Chase · PNC · Wells Fargo · BofA + 25 more</p>
+          </button>
         </div>
         {editing&&(<Sheet2 title="Edit Profile" onClose={()=>setEditing(false)} footer={<><FlowBack onClick={()=>setEditing(false)}/><FlowNext onClick={()=>{setUserName?.(tmpName);setUserEmail?.(tmpEmail);setEditing(false);}} label="Save"/></>}>
           <div className="space-y-4">
@@ -1567,7 +1566,7 @@
   </script>
   <script>
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/sw.js?v=41');
+      navigator.serviceWorker.register('/sw.js?v=42');
     }
   </script>
 </body>
