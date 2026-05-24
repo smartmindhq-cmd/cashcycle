@@ -286,34 +286,28 @@
 
     function SideMenu({open,onClose,go,dark,setDark,onCheckUpdate}){
       if(!open)return null;
-      const panelRef=useRef(null);
-      useEffect(()=>{
-        const el=panelRef.current;if(!el)return;
-        let sx=0,sy=0;
-        const ts=e=>{sx=e.touches[0].clientX;sy=e.touches[0].clientY;};
-        const te=e=>{const dx=e.changedTouches[0].clientX-sx,dy=Math.abs(e.changedTouches[0].clientY-sy);if(dx<-50&&dy<80)onClose();};
-        el.addEventListener("touchstart",ts,{passive:true});el.addEventListener("touchend",te,{passive:true});
-        return()=>{el.removeEventListener("touchstart",ts);el.removeEventListener("touchend",te);};
-      },[onClose]);
-      const items=[
-        {key:"home",    label:"Forecast",          dest:"home",     icon:<CalendarIcon/>},
-        {key:"profile", label:"Profile",            dest:"profile",  icon:<UserIcon/>},
-        {key:"settings",label:"Settings",           dest:"settings", icon:<GearIcon/>},
-        {key:"update",  label:"Check for Update",   dest:null,       icon:<DownloadIcon/>},
-      ];
-      return(<div className="absolute inset-0 z-40 flex" onClick={onClose}>
-        <div ref={panelRef} className="flex h-full w-[80%] flex-col bg-[#f4f4f5] px-5 shadow-2xl" style={{paddingTop:"calc(env(safe-area-inset-top,0px)+24px)",paddingBottom:"calc(env(safe-area-inset-bottom,10px)+16px)",animation:"slideIn .25s ease-out"}} onClick={e=>e.stopPropagation()}>
-          <h1 className="text-4xl font-extrabold tracking-tight text-slate-900">Menu</h1>
-          <div className="mt-6 flex items-center justify-between px-1">
-            <span className="flex items-center gap-3 text-lg font-semibold text-slate-900"><SunIcon/> Dark Mode</span>
-            <Toggle on={dark} onClick={()=>setDark(!dark)}/>
+      const items=[["📅","Forecast","home"],["👤","Profile","profile"],["⚙️","Settings","settings"]];
+      return(
+        <div className="absolute inset-0 z-40 flex" onClick={onClose}>
+          <div className="flex h-full w-[78%] flex-col bg-white p-6 shadow-2xl" style={{paddingTop:"calc(env(safe-area-inset-top,0px)+24px)",paddingBottom:"calc(env(safe-area-inset-bottom,0px)+24px)",animation:"slideIn .25s ease-out"}} onClick={e=>e.stopPropagation()}>
+            <h1 className="text-4xl font-extrabold text-slate-900">Menu</h1>
+            <div className="mt-6 flex items-center justify-between">
+              <span className="flex items-center gap-2 font-semibold text-slate-900">☀️ Dark Mode</span>
+              <button onClick={()=>setDark(!dark)} className={cx("h-8 w-14 rounded-full p-1 transition",dark?"bg-blue-500":"bg-slate-300")}>
+                <div className={cx("h-6 w-6 rounded-full bg-white transition",dark&&"translate-x-6")}/>
+              </button>
+            </div>
+            <div className="mt-4 space-y-3">
+              {items.map(([ic,label,dest])=>(
+                <button key={label} onClick={()=>{onClose();dest&&go(dest);}} className="flex w-full items-center gap-3 rounded-2xl bg-slate-50 px-4 py-4 text-left font-semibold text-slate-900">
+                  <span className="w-6 text-center">{ic}</span>{label}
+                </button>
+              ))}
+            </div>
           </div>
-          <div className="mt-4 space-y-3">
-            {items.map(it=>(<button key={it.key} onClick={()=>{onClose();it.dest?go(it.dest):it.key==="update"?onCheckUpdate?.():null;}} className="flex w-full items-center gap-4 rounded-2xl bg-white px-5 py-5 text-left text-xl font-semibold shadow-sm transition active:scale-[0.98] text-slate-900"><span>{it.icon}</span>{it.label}</button>))}
-          </div>
+          <div className="h-full flex-1 bg-black/30"/>
         </div>
-        <div className="h-full flex-1 bg-black/30"/>
-      </div>);
+      );
     }
     // ── CalendarHome ──────────────────────────────────────
     const DAY_HEADERS=["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
@@ -1568,7 +1562,7 @@
   </script>
   <script>
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/sw.js?v=36');
+      navigator.serviceWorker.register('/sw.js?v=37');
     }
   </script>
 </body>
