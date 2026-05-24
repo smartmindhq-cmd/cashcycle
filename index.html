@@ -273,7 +273,7 @@
     function DockNav({onAdd,addOpen,onInsights}){
       const {tab,setTab}=useContext(TabCtx);
       return(
-        <div style={{flexShrink:0,display:"flex",justifyContent:"center",alignItems:"center",background:"#fff",paddingTop:"8px",paddingBottom:"max(env(safe-area-inset-bottom,12px),12px)"}}>
+        <div style={{flexShrink:0,display:"flex",justifyContent:"center",alignItems:"center",background:"#fff",paddingTop:"6px",paddingBottom:"max(env(safe-area-inset-bottom,0px),6px)"}}>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",borderRadius:"999px",background:"#fff",boxShadow:"0 4px 24px rgba(0,0,0,0.13)",border:"1px solid rgba(0,0,0,0.06)",padding:"6px 16px",width:"90%",maxWidth:"370px"}}>
             <DockBtn label="calendar" active={tab==="home"} onClick={()=>setTab("home")}><CalendarIcon/></DockBtn>
             <DockBtn label="insights" active={false} onClick={()=>onInsights?.()}><ClockIcon/></DockBtn>
@@ -1567,7 +1567,7 @@
   </script>
   <script>
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/sw.js?v=40');
+      navigator.serviceWorker.register('/sw.js?v=41');
     }
   </script>
 </body>
